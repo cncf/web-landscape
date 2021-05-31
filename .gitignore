@@ -1,0 +1,9 @@
+tmp
+logs
+# Mac files
+.DS_Store
+
+.yarn/*
+!.yarn/releases
+!.yarn/plugins
+.pnp.*
