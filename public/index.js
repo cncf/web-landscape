@@ -6,7 +6,8 @@ function init() {
     mainDiv.innerHTML = `
         <h1>yarn fecth demo</h1>
         <input id="dir" type="button" value="select folder..."></input>
-        <input id="run" type="button" value="Run!"></input>
+        <input id="run" type="button" value="yarn fetch"></input>
+        <input id="server" type="button" value="yarn dev"></input>
         <div id="status"></div>
         <div id="output"></div>
     `;
@@ -53,18 +54,20 @@ function init() {
                 }
             }
             statusDiv.innerText = `Fetch finished. ${data.files.length} files updated`;
+            serverButton.disabled = false;
         }
     };
 
     const inputButton = mainDiv.querySelector('#run');
+    const serverButton = mainDiv.querySelector('#server');
     const dirButton = mainDiv.querySelector('#dir');
     const outputDiv = mainDiv.querySelector('#output');
     const statusDiv = mainDiv.querySelector('#status');
 
     inputButton.disabled = true;
+    serverButton.disabled = true;
 
-    inputButton.addEventListener('click', async function() {
-        statusDiv.innerText = `Collecting local files`;
+    async function collectAllFiles() {
         const files = [];
         const landscapeFiles = ['settings.yml', 'landscape.yml', 'processed_landscape.yml'];
         const landscapeFolders = ['images', 'cached_logos', 'hosted_logos'];
@@ -82,7 +85,12 @@ function init() {
                 files.push({file: `${folder}/${file}`, content});
             }
         }
+        return files;
+    }
 
+    inputButton.addEventListener('click', async function() {
+        statusDiv.innerText = `Collecting local files`;
+        const files = await collectAllFiles();
         statusDiv.innerText = `Uploading local files`;
         await fetch('api/fetch', {
             body: JSON.stringify({ socketId: socketId, files: files}),
@@ -93,6 +101,19 @@ function init() {
             }
         });
         statusDiv.innerText = `Waiting for response from the server`;
+    });
+
+    serverButton.addEventListener('click', async function() {
+        statusDiv.innerText = `Starting a dev server`;
+        await fetch('api/server', {
+            body: JSON.stringify({ socketId: socketId }),
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json' 
+            }
+        });
+        statusDiv.innerText = `Dev server started`;
     });
 
     dirButton.addEventListener('click', async function() {
