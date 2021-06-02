@@ -2,16 +2,28 @@ console.info('test');
 
 
 function init() {
-    const mainDiv = document.createElement('div');
-    mainDiv.innerHTML = `
-        <h1>yarn fecth demo</h1>
-        <input id="dir" type="button" value="select folder..."></input>
-        <input id="run" type="button" value="yarn fetch"></input>
-        <input id="server" type="button" value="yarn dev"></input>
-        <div id="status"></div>
-        <div id="output"></div>
+    const tmpDiv = document.createElement('div');
+    document.body.appendChild(tmpDiv);
+    tmpDiv.outerHTML = `
+        <div id="main" style="height: 100%;">
+            <div style="height: 40px;">
+                <span style="font-size: 24px;"><b>yarn fecth demo</b></span>
+                <input id="dir" type="button" value="1. Select folder with a landscape"></input>
+                <input id="run" type="button" value="2. Run yarn fetch (takes areound a minute)"></input>
+                <input id="server" type="button" value="3. Run yarn dev (takes around a minute)"></input>
+                <div id="status" style="display: inline-block; font-weight: bold;"></div>
+            </div>
+            <div style="height: calc(100% - 40px)">
+                <div class="output" id="output-fetch" style="position: absolute; width: 50%; height: 100%; left: 0">
+                  <div><b>yarn fetch</b> output</div>
+                </div>
+                <div class="output" id="output-dev" style="position: absolute; width: 50%; height: 100%; left: 50%">
+                  <div><b>yarn dev</b> output</div>
+                </div>
+            </div>
+        </div>
     `;
-    document.body.appendChild(mainDiv);
+    const mainDiv = document.querySelector('#main');
 
     const ws = new WebSocket(window.location.href.replace('http', 'ws'));
     ws.onmessage = async function(event) {
@@ -23,6 +35,7 @@ function init() {
         if (data.type === 'message') {
             const textEl = document.createElement('span');
             textEl.innerText = data.text;
+            const outputDiv = data.target = 'fetch' ? outputFetchDiv : outputDevDiv;
             outputDiv.appendChild(textEl);
             statusDiv.innerText = `Fetching data`;
         }
@@ -61,7 +74,8 @@ function init() {
     const inputButton = mainDiv.querySelector('#run');
     const serverButton = mainDiv.querySelector('#server');
     const dirButton = mainDiv.querySelector('#dir');
-    const outputDiv = mainDiv.querySelector('#output');
+    const outputFetchDiv = mainDiv.querySelector('#output-fetch');
+    const outputDevDiv = mainDiv.querySelector('#output-dev');
     const statusDiv = mainDiv.querySelector('#status');
 
     inputButton.disabled = true;
