@@ -40,17 +40,36 @@ async function cloneLandscapeApp({srcPath, appPath}) {
 }
 
 async function uploadFiles({landscapePath, files}) {
-
     await fs.mkdir(landscapePath, { recursive: true});
     console.info({landscapePath});
-    childProcess.execSync(`rm -rf ${landscapePath}`);
-    await fs.mkdir(landscapePath, { recursive: true});
+    const validFiles = {};
     for (let entry of files) {
         const dir = entry.file.split('/').slice(0, -1).join('');
+        validFiles[entry.file] = true;
         if (dir) {
             await fs.mkdir(path.resolve(landscapePath, dir), { recursive: true});
         }
-        await fs.writeFile(path.resolve(landscapePath, entry.file), entry.content);
+        const filePath = path.resolve(landscapePath, entry.file);
+        let content = null;
+        try {
+            content = await fs.readFile(filePath, 'utf-8');
+        } catch(ex) {
+
+        }
+
+        if (content !== entry.content) {
+            await fs.writeFile(filePath, entry.content);
+        }
+    }
+    const folders = ['images', 'hosted_logos', 'cached_logos'];
+    for (let folder of folders) {
+        const folderFiles = await fs.readdir(path.resolve(landscapePath, folder));
+        for (let folderFile of folderFiles) {
+            const fullPath = `${folder}/${folderFile}`;
+            if (!validFiles[fullPath]) {
+                await fs.unlink(path.resolve(landscapePath, folder, folderFile));
+            }
+        }
     }
 }
 

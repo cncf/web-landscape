@@ -84,21 +84,23 @@ function init() {
     document.body.appendChild(tmpDiv);
     tmpDiv.outerHTML = `
         <div id="main" style="height: 100%;">
-            <div style="height: 40px;">
+            <div style="height: 40px; background: #ddd;">
                 <span style="font-size: 24px;"><b>yarn fecth demo</b></span>
                 <input id="dir" type="button" value="1. Select folder with a landscape"></input>
                 <input id="run" type="button" value="2. Run yarn fetch"></input>
                 <input id="server" type="button" value="3. Run yarn dev"></input>
+                <span id="overlay-wrapper"><input id="overlay" type="checkbox" checked></input><label for="overlay">Show Overlay</label></span>
                 <a href="/landscape" target="_blank">View Landscape</a>
                 <div id="status" style="display: inline-block; font-weight: bold;"></div>
             </div>
             <div style="height: calc(100% - 60px); position: relative;">
-                <div class="output" id="output-fetch" style="position: absolute; width: 50%; height: 100%; left: 0">
+                <div class="output" id="output-fetch" style="position: absolute; z-index: 100; width: 50%; height: 100%; left: 0">
                   <div><b>yarn fetch</b> output</div>
                 </div>
-                <div class="output" id="output-dev" style="position: absolute; width: 50%; height: 100%; left: 50%">
+                <div class="output" id="output-dev" style="position: absolute; z-index: 100; width: 50%; height: 100%; left: 50%">
                   <div><b>yarn dev</b> output</div>
                 </div>
+                <iframe id="iframe" style="border: 0; position: absolute; z-index: 1; width: 100%; height: 100%; left: 0; top: 0;"></iframe>
             </div>
         </div>
     `;
@@ -170,10 +172,14 @@ function init() {
     const outputDevDiv = mainDiv.querySelector('#output-dev');
     const statusDiv = mainDiv.querySelector('#status');
     const landscapeLink = mainDiv.querySelector('a');
+    const iframeTag = mainDiv.querySelector('iframe');
+    const overlayWrapper = mainDiv.querySelector('#overlay-wrapper');
 
+    overlayWrapper.style.display = "none";
     inputButton.disabled = true;
     serverButton.disabled = true;
     landscapeLink.style.visibility = "hidden";
+    iframeTag.style.opacity = 0;
 
 
 
@@ -194,6 +200,8 @@ function init() {
             }
         });
         statusDiv.innerText = `Waiting for response from the server`;
+        overlayWrapper.querySelector('input').checked = true;
+        updateOverlayVisibility();
     });
 
     function listenForFileChanges() {
@@ -244,8 +252,23 @@ function init() {
         landscapeLink.style.visibility = "";
         listenForFileChanges();
         serverButton.style.visibility = "hidden";
+        iframeTag.src = "/landscape";
+        iframeTag.style.opacity = 1;
+        overlayWrapper.style.display = "";
+        outputFetchDiv.style.opacity = 0.3;
+        outputFetchDiv.style.pointerEvents = 'none';
+        outputDevDiv.style.opacity = 0.3;
+        outputDevDiv.style.pointerEvents = 'none';
     });
 
+    function updateOverlayVisibility() {
+        const isChecked = overlayWrapper.querySelector('input').checked;
+        outputFetchDiv.style.visibility = isChecked ? "" : "hidden";
+        outputDevDiv.style.visibility = isChecked ? "" : "hidden";
+    }
+
+    overlayWrapper.querySelector('input').addEventListener('click', updateOverlayVisibility);
+    overlayWrapper.querySelector('input').addEventListener('change', updateOverlayVisibility);
 
     dirButton.addEventListener('click', async function() {
         window.webFolder = await window.showDirectoryPicker();

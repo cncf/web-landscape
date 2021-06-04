@@ -1,3 +1,4 @@
+const fs = require('fs/promises');
 const path = require('path');
 const express = require('express');
 const childProcess = require('child_process');
@@ -19,9 +20,52 @@ let serverPort = 3010;
 const serverData = {};
 
 async function cleanup() {
+    const log = function(x) {
+        console.info(`[Cleanup] ${x}`);
+    }
     // 1 - remove entry from serverData with no more requests than X minutes ago
     // 2 - get folders not in serverData more than 5 minutes ago and remove those folders. 
     // 3 - get processes (ps aux | grep next dev | grep -v grep) not in serverData and kill those processes
+    for (let key in serverData) {
+        const serverInfo = serverData[key];
+        if (new Date().getTime() > serverInfo.lastRequest + 30 * 60 * 1000) {
+            log(`Deleting an entry ${key}`);
+            delete serverData[key];
+        }
+    }
+
+    const folders = await fs.readdir(tmpFolder);
+    for (let folder of folders) {
+        const folderParts = folder.split(':');
+        const createdTime = + folderParts[1];
+        const serverInfo = Object.values(serverData).filter( (x) => x.socketId === folder)[0];
+        if (!serverInfo && new Date().getTime() > createdTime + 30 * 60 * 1000) {
+            log(`Deleting a folder ${folder}`);
+            await fs.rm(path.join(tmpFolder, folder), { recursive: true, force: true});
+        }
+    }
+
+    const pids = childProcess.execSync('ps aux | grep "yarn-berry.js dev" | grep -v grep || echo').toString()
+        .split('\n').filter( (x) => !!x).map( (x) => +x.split(' ').filter( (x) => !!x)[1]);
+    // detect not managed processes
+    for (let pid of pids) {
+        const serverInfo = Object.values(serverData).filter( (x) => x.pid === pid)[0];
+        if (!serverInfo) {
+            console.info(pids, Object.values(serverData));
+            log(`Killing process ${pid}`);
+            process.kill(pid);
+        }
+    }
+    // detect killed processes
+    for (let key in serverData) {
+        const serverInfo = serverData[key];
+        if (!pids.includes(serverInfo.pid)) {
+            console.info(pids, serverInfo);
+            log(`Deleting an entry ${key}`);
+            delete serverData[key];
+        }
+    }
+
 }
 
 async function uploadFiles(req, res) {
@@ -90,10 +134,10 @@ app.post('/api/server', async function(req, res) {
     serverPort += 1;
     const cmd = `PORT=${serverPort} FORCE_COLOR=0 PROJECT_NAME=landscape PROJECT_PATH=../landscape yarn dev`;
     const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: appPath });
-    console.info({cmd, appPath});
+    console.info({cmd, appPath, pid: pid.pid});
 
     serverData[serverPort] = {
-        pid,
+        pid: pid.pid,
         serverPort,
         socketId,
         lastRequest: new Date().getTime()
@@ -116,12 +160,6 @@ app.post('/api/server', async function(req, res) {
     });
 });
 
-// allow a client to just update files
-app.post('/api/upload', function(req, res) {
-
-
-});
-
 app.use('/landscape', function(req, res) {
     const serverPort = req.cookies.serverPort;
     if (!serverPort) {
@@ -138,6 +176,10 @@ app.use('/landscape', function(req, res) {
     }
 });
 
+app.use('/api/status', function(req, res) {
+
+});
+
 
 const server = require('http').createServer(app);
 const webSocketServer = new WebSocket.Server({ server });
@@ -151,3 +193,7 @@ webSocketServer.on("connection", (webSocket) => {
 });
 
 server.listen(process.env.PORT || 3000);
+
+// autocleanup everything regularly
+cleanup();
+setTimeout(cleanup, 5 * 60 * 1000);
