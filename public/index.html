@@ -8,9 +8,58 @@
           background: black;
           color: white;
           overflow: scroll;
+          transition: .3s ease-in-out;
       }
       #status {
           font-weight: bold;
+      }
+      
+      .output.overlay {
+          background: inherit;
+          pointer-events: none;
+          opacity: 0.3;
+      }
+      .output.overlay span {
+          background: white;
+          color: green;
+      }
+
+      #output-dev.collapsed {
+          width: 40px !important;
+          left: calc(100% - 40px) !important;
+          overflow: hidden !important;
+          background: inherit !important;
+          pointer-events: none;
+      }
+
+      #output-fetch.collapsed {
+          width: 40px !important;
+          left: 0 !important;
+          overflow: hidden !important;
+          background: inherit !important;
+          pointer-events: none;
+      }
+
+      .switch {
+            position: absolute;
+            background: grey;
+            border-radius: 25px;
+            width: 25px;
+            height: 25px;
+            font-size: 20px;
+            line-height: 25px;
+            font-family: monospace;
+            text-align: center;
+            cursor: pointer;
+            top: 5px;
+            right: 5px;
+            transform: rotate( 45deg);
+            font-weight: bold;
+            pointer-events: all;
+      }
+
+      .collapsed .switch {
+            transform: rotate(0deg);
       }
 
     </style>

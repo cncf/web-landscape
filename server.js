@@ -15,9 +15,14 @@ app.use(cookieParser());
 const utils = require('./utils');
 const port = process.env.PORT || 3000;
 const tmpFolder = process.env.TMP_FOLDER || 'tmp';
+const landscapeAppFolder = process.env.LANDSCAPEAPP_FOLDER || "../landscapeapp";
 let serverPort = 3010;
+const maxServers = 20;
+const maxTimeoutInMinutes = 5;
 
 const serverData = {};
+
+require('fs').mkdirSync(tmpFolder, { recursive: true });
 
 async function cleanup() {
     const log = function(x) {
@@ -26,9 +31,10 @@ async function cleanup() {
     // 1 - remove entry from serverData with no more requests than X minutes ago
     // 2 - get folders not in serverData more than 5 minutes ago and remove those folders. 
     // 3 - get processes (ps aux | grep next dev | grep -v grep) not in serverData and kill those processes
+    console.info({serverData});
     for (let key in serverData) {
         const serverInfo = serverData[key];
-        if (new Date().getTime() > serverInfo.lastRequest + 30 * 60 * 1000) {
+        if (new Date().getTime() > serverInfo.lastRequest + maxTimeoutInMinutes * 60 * 1000) {
             log(`Deleting an entry ${key}`);
             delete serverData[key];
         }
@@ -36,12 +42,12 @@ async function cleanup() {
 
     const folders = await fs.readdir(tmpFolder);
     for (let folder of folders) {
-        const folderParts = folder.split(':');
-        const createdTime = + folderParts[1];
+        const createdTime = (await fs.stat(path.resolve(tmpFolder, folder))).ctimeMs;
         const serverInfo = Object.values(serverData).filter( (x) => x.socketId === folder)[0];
-        if (!serverInfo && new Date().getTime() > createdTime + 30 * 60 * 1000) {
+        console.info({ folder, createdTime, serverInfo });
+        if (!serverInfo && new Date().getTime() > createdTime + maxTimeoutInMinutes * 60 * 1000) {
             log(`Deleting a folder ${folder}`);
-            await fs.rm(path.join(tmpFolder, folder), { recursive: true, force: true});
+            childProcess.exec(`rm -rf "${path.join(tmpFolder, folder)}"`);
         }
     }
 
@@ -65,7 +71,24 @@ async function cleanup() {
             delete serverData[key];
         }
     }
+}
 
+async function prepareServerFolders() {
+    const folders = await fs.readdir(tmpFolder);
+    if (folders.length < maxServers ) {
+        const folderName = `tmp${Math.random()}`;
+        const finalFolderName = folderName.replace('tmp', 'server');
+        const appPath = path.resolve(tmpFolder, folderName);
+        await utils.cloneLandscapeApp({ srcPath: landscapeAppFolder, appPath: appPath });
+        await fs.rename(path.resolve(tmpFolder, folderName), path.resolve(tmpFolder, finalFolderName));
+        console.info(`Server prepared`);
+    }
+}
+
+async function getFreeFolder() {
+    const folders = await fs.readdir(tmpFolder);
+    const temporaryFolders = folders.filter( (x) => x.startsWith('server'));
+    return temporaryFolders[0];
 }
 
 async function uploadFiles(req, res) {
@@ -96,7 +119,7 @@ app.post('/api/fetch', async (req, res) => {
     // upload files to a temp folder
 
     const cmd = `FORCE_COLOR=0 PROJECT_PATH="${tmpPath}" yarn fetch`;
-    const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: path.resolve('../landscapeapp') });
+    const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: path.resolve(landscapeAppFolder) });
 
     pid.stdout.on('data', (data) => {
         clientSocket.send(JSON.stringify({type: 'message', target: 'fetch', text: data.toString()}));
@@ -129,7 +152,15 @@ app.post('/api/server', async function(req, res) {
 
     const appPath = path.resolve(tmpFolder, socketId, 'landscapeapp');
     const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
-    await utils.cloneLandscapeApp({ srcPath: '../landscapeapp', appPath: appPath });
+
+    const freeFolder = await getFreeFolder();
+    if (freeFolder) {
+        await fs.rename(path.resolve(tmpFolder, freeFolder), appPath);
+    } else {
+        await utils.cloneLandscapeApp({ srcPath: landscapeAppFolder, appPath: appPath });
+    }
+
+
     // get a new port
     serverPort += 1;
     const cmd = `PORT=${serverPort} FORCE_COLOR=0 PROJECT_NAME=landscape PROJECT_PATH=../landscape yarn dev`;
@@ -196,4 +227,6 @@ server.listen(process.env.PORT || 3000);
 
 // autocleanup everything regularly
 cleanup();
-setTimeout(cleanup, 5 * 60 * 1000);
+prepareServerFolders();
+setInterval(cleanup, 1 * 60 * 1000);
+setInterval(prepareServerFolders, 1 * 60 * 1000);

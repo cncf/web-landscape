@@ -15,7 +15,7 @@ async function collectAllFiles() {
         }
     }
 
-    for (var folder of landscapeFolders) {
+    await Promise.all(landscapeFolders.map(async folder => {
         const dirHandle = await webFolder.getDirectoryHandle(folder);
         for await (const entry of dirHandle.values()) {
             const file = entry.name;
@@ -28,7 +28,7 @@ async function collectAllFiles() {
                 lastModified: fileObj.lastModified
             };
         }
-    }
+    }));
     return files;
 }
 
@@ -94,10 +94,12 @@ function init() {
                 <div id="status" style="display: inline-block; font-weight: bold;"></div>
             </div>
             <div style="height: calc(100% - 60px); position: relative;">
-                <div class="output" id="output-fetch" style="position: absolute; z-index: 100; width: 50%; height: 100%; left: 0">
+                <div class="output" id="output-fetch" style="position: absolute; z-index: 100; width: 30%; height: 60%; left: 0; top: 10%">
+                  <div class="switch">+</div>
                   <div><b>yarn fetch</b> output</div>
                 </div>
-                <div class="output" id="output-dev" style="position: absolute; z-index: 100; width: 50%; height: 100%; left: 50%">
+                <div class="output" id="output-dev" style="position: absolute; z-index: 100; width: 30%; height: 60%; left: 70%; top: 10%;">
+                  <div class="switch">+</div>
                   <div><b>yarn dev</b> output</div>
                 </div>
                 <iframe id="iframe" style="border: 0; position: absolute; z-index: 1; width: 100%; height: 100%; left: 0; top: 0;"></iframe>
@@ -129,7 +131,9 @@ function init() {
             textEl.innerText = data.text;
             const outputDiv = data.target === 'fetch' ? outputFetchDiv : outputDevDiv;
             outputDiv.appendChild(textEl);
-            statusDiv.innerText = `Fetching data`;
+            if (data.target === 'fetch') {
+                statusDiv.innerText = `Fetching data`;
+            }
         }
         if (data.type === 'finish') {
             statusDiv.innerText = `Waiting for updated files`;
@@ -200,36 +204,39 @@ function init() {
             }
         });
         statusDiv.innerText = `Waiting for response from the server`;
-        overlayWrapper.querySelector('input').checked = true;
-        updateOverlayVisibility();
+        // overlayWrapper.querySelector('input').checked = true;
+        // updateOverlayVisibility();
+        outputFetchDiv.classList.remove('collapsed');
     });
 
     function listenForFileChanges() {
+        const fn = async function() {
+            if (!window.allFiles) {
+                return;
+            }
+            console.time('changes');
+            const changedFiles = await getChangedFiles(window.allFiles);
+            console.timeEnd('changes');
+            console.info(changedFiles);
+            if (changedFiles.length > 0) {
+                statusDiv.innerText = `Uploading local file changes`;
+                const files = await collectAllFiles();
+                window.allFiles = files;
+                await fetch('api/upload', {
+                    body: JSON.stringify({ socketId: socketId, files: Object.values(files)}),
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json' 
+                    }
+                });
+                statusDiv.innerText = `Changes uploaded`;
+            }
+            setTimeout(fn, 1000);
+        };
         if (!window.changesTimerSet) {
             window.changesTimerSet = true;
-            setInterval(async function() {
-                if (!window.allFiles) {
-                    return;
-                }
-                console.time('changes');
-                const changedFiles = await getChangedFiles(window.allFiles);
-                console.timeEnd('changes');
-                console.info(changedFiles);
-                if (changedFiles.length > 0) {
-                    statusDiv.innerText = `Uploading local file changes`;
-                    const files = await collectAllFiles();
-                    window.allFiles = files;
-                    await fetch('api/upload', {
-                        body: JSON.stringify({ socketId: socketId, files: Object.values(files)}),
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json' 
-                        }
-                    });
-                    statusDiv.innerText = `Changes uploaded`;
-                }
-            }, 2000);
+            fn();
         }
     }
 
@@ -255,10 +262,9 @@ function init() {
         iframeTag.src = "/landscape";
         iframeTag.style.opacity = 1;
         overlayWrapper.style.display = "";
-        outputFetchDiv.style.opacity = 0.3;
-        outputFetchDiv.style.pointerEvents = 'none';
-        outputDevDiv.style.opacity = 0.3;
-        outputDevDiv.style.pointerEvents = 'none';
+        // outputFetchDiv.classList.add('overlay');
+        // outputDevDiv.classList.add('overlay');
+        outputDevDiv.classList.remove('collapsed');
     });
 
     function updateOverlayVisibility() {
@@ -277,6 +283,13 @@ function init() {
             console.info('Permission to the folder was not provided');
         }
         enableButtons();
+    });
+
+    outputDevDiv.querySelector('.switch').addEventListener('click', function() {
+        outputDevDiv.classList.toggle('collapsed');
+    });
+    outputFetchDiv.querySelector('.switch').addEventListener('click', function() {
+        outputFetchDiv.classList.toggle('collapsed');
     });
 }
 

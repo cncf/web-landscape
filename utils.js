@@ -9,34 +9,33 @@ async function cloneLandscapeApp({srcPath, appPath}) {
     childProcess.execSync(`rm -rf ${appPath}`);
     await fs.mkdir(appPath, { recursive: true});
 
-    const srcFiles = await fs.readdir(srcPath);
-    for (var file of srcFiles) {
-        if (file === 'node_modules') {
-            async function walk(dir) {
-                let files = await fs.readdir(dir);
-                files = await Promise.all(files.map(async file => {
-                    const filePath = path.join(dir, file);
-                    const stats = await fs.stat(filePath);
-                    if (stats.isDirectory()) return walk(filePath);
-                    else if(stats.isFile()) return {dir: dir.replace(srcPath, ''), file: file, filePath: filePath};
-                }));
-                return files.reduce((all, folderContents) => all.concat(folderContents), []);
-            }
-            const allNodeModulesFiles = await walk(path.join(srcPath, 'node_modules'));
-            for(let entry of allNodeModulesFiles) {
-                const dir = entry.dir.startsWith('/') ? entry.dir.substring(1) : entry.dir;
-                const appFilePath = entry.filePath.replace(srcPath + '/', '');
-                await fs.mkdir(path.resolve(appPath, dir), { recursive: true });
-                await fs.link(path.resolve(entry.filePath), path.resolve(appPath, appFilePath));
-            }
-        } else if (file === '.git') {
+    async function walk(dir, isRoot) {
+        let files = await fs.readdir(dir);
+        files = await Promise.all(files.map(async file => {
+            const filePath = path.join(dir, file);
+            const stats = await fs.stat(filePath);
+            if (stats.isDirectory()) {
+                if (isRoot && file === '.next') {
+                    // console.info('Creating .next');
+                    await fs.mkdir(path.resolve(appPath, '.next'))
+                } else if (isRoot && file === '.git') {
 
-        } else if (file === '.next') {
-            await fs.mkdir(path.resolve(appPath, '.next'))
-        } else {
-            childProcess.execSync(`cp -r ${srcPath}/${file} ${appPath}/${file}`);
-        }
+                    // console.info('Skipping .git');
+                } else {
+                    if (isRoot) {
+                    //    console.info('Walking into: ' + file, path.resolve(appPath, filePath.replace(srcPath + "/", '')), filePath);
+                    }
+                    await fs.mkdir(path.resolve(appPath, filePath.replace(srcPath + "/", '')));
+                    await walk(filePath);
+                }
+            }
+            else if(stats.isFile()) {
+                await fs.link(path.resolve(filePath), path.resolve(appPath, filePath.replace(srcPath + '/', ''))); 
+            }
+        }));
     }
+    await walk(path.join(srcPath), true);
+
 }
 
 async function uploadFiles({landscapePath, files}) {
