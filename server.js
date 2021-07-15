@@ -57,8 +57,13 @@ async function cleanup() {
         }
     }
 
-    const pids = childProcess.execSync('ps aux | grep "yarn-berry.js dev" | grep -v grep || echo').toString()
+    const pids1 = childProcess.execSync('ps aux | grep "yarn-berry.js dev" | grep -v grep || echo').toString()
         .split('\n').filter( (x) => !!x).map( (x) => +x.split(' ').filter( (x) => !!x)[1]);
+    const pids = pids1.length > 0
+        ?  pids1
+        : childProcess.execSync('ps aux | grep "yarn dev" | grep -v grep || echo').toString()
+        .split('\n').filter( (x) => !!x).map( (x) => +x.split(' ').filter( (x) => !!x)[1]);
+
     // detect not managed processes
     for (let pid of pids) {
         const serverInfo = Object.values(serverData).filter( (x) => x.pid === pid)[0];
