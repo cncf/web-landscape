@@ -22,6 +22,12 @@ const maxTimeoutInMinutes = 5;
 
 const serverData = {};
 
+const httpsInfo = process.env.DOMAIN ? {
+    key: require('fs').readFileSync(`/etc/letsencrypt/live/${process.env.DOMAIN}/privkey.pem`, 'utf-8'),
+    cert: require('fs').readFileSync(`/etc/letsencrypt/live/${process.env.DOMAIN}/cert.pem`, 'utf-8'),
+    ca: require('fs').readFileSync(`/etc/letsencrypt/live/${process.env.DOMAIN}/chain.pem`, 'utf-8')
+} : null;
+
 require('fs').mkdirSync(tmpFolder, { recursive: true });
 
 async function cleanup() {
@@ -89,6 +95,13 @@ async function getFreeFolder() {
     const folders = await fs.readdir(tmpFolder);
     const temporaryFolders = folders.filter( (x) => x.startsWith('server'));
     return temporaryFolders[0];
+}
+
+async function autoUpdate() {
+    const autoUpdatePid = childProcess.spawn('bash', ['-c', ` git pull && yarn`], {
+        cwd: path.resolve(landscapeAppFolder),
+        stdio: 'inherit'
+    });
 }
 
 async function uploadFiles(req, res) {
@@ -212,7 +225,7 @@ app.use('/api/status', function(req, res) {
 });
 
 
-const server = require('http').createServer(app);
+const server = httpsInfo ? require('https').createServer(httpsInfo, app) : require('http').createServer(app);
 const webSocketServer = new WebSocket.Server({ server });
 webSocketServer.allClients = {};
 webSocketServer.on("connection", (webSocket) => {
@@ -223,10 +236,12 @@ webSocketServer.on("connection", (webSocket) => {
     console.info("Total connected clients:", Object.keys(webSocketServer.allClients));
 });
 
-server.listen(process.env.PORT || 3000);
+server.listen(httpsInfo ? 443 : process.env.PORT || 3000);
 
 // autocleanup everything regularly
 cleanup();
 prepareServerFolders();
+autoUpdate();
 setInterval(cleanup, 1 * 60 * 1000);
 setInterval(prepareServerFolders, 1 * 60 * 1000);
+setInterval(autoUpdate, 1 * 60 * 1000);
