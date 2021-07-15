@@ -41,7 +41,7 @@ async function cleanup() {
     for (let key in serverData) {
         const serverInfo = serverData[key];
         if (new Date().getTime() > serverInfo.lastRequest + maxTimeoutInMinutes * 60 * 1000) {
-            log(`Deleting an entry ${key}`);
+            log(`Deleting an entry ${key} because of timeout`);
             delete serverData[key];
         }
     }
@@ -73,7 +73,7 @@ async function cleanup() {
         const serverInfo = serverData[key];
         if (!pids.includes(serverInfo.pid)) {
             console.info(pids, serverInfo);
-            log(`Deleting an entry ${key}`);
+            log(`Deleting an entry ${key} - no pid ${serverInfo.pid}`);
             delete serverData[key];
         }
     }
