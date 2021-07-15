@@ -244,4 +244,4 @@ prepareServerFolders();
 autoUpdate();
 setInterval(cleanup, 1 * 60 * 1000);
 setInterval(prepareServerFolders, 1 * 60 * 1000);
-setInterval(autoUpdate, 1 * 60 * 1000);
+// setInterval(autoUpdate, 1 * 60 * 1000);
