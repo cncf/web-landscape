@@ -18,7 +18,7 @@ const tmpFolder = process.env.TMP_FOLDER || 'tmp';
 const landscapeAppFolder = process.env.LANDSCAPEAPP_FOLDER || "../landscapeapp";
 let serverPort = 3010;
 const maxServers = 20;
-const maxTimeoutInMinutes = 5;
+const maxTimeoutInMinutes = 15;
 
 const serverData = {};
 
@@ -249,4 +249,4 @@ prepareServerFolders();
 autoUpdate();
 setInterval(cleanup, 1 * 60 * 1000);
 setInterval(prepareServerFolders, 1 * 60 * 1000);
-// setInterval(autoUpdate, 1 * 60 * 1000);
+setInterval(autoUpdate, 1 * 60 * 1000);
