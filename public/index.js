@@ -1,5 +1,308 @@
 console.info('test');
 
+function yaml2json(content) {
+    var dump = jsyaml.dump(content, {lineWidth: 160});
+    dump = dump.replace(/(- \w+:) null/g, '$1');
+    dump = dump.split("\n").filter((x) => x.indexOf('!<tag:yaml.org,2002:js/undefined>') === -1).join("\n");
+    return dump;
+}
+
+function editLandscapeYml(content) {
+    const items = [];
+    for (var category of content.landscape) {
+        for (var subcategory of category.subcategories) {
+	    for (var item of subcategory.items) {
+	        items.push({
+		    category: category.name,
+		    subcategory: subcategory.name,
+		    id: `${category.name}:${subcategory.name}:${item.name}`,
+		    ...item
+		});
+	    }
+	}
+    }
+    console.info(items);
+    
+
+    const allowedKeys = [
+	'name',
+	'homepage_url',
+	'logo',
+	'twitter',
+	'crunchbase',
+	'repo_url',
+	'project_org',
+	'additional_repos',
+	'stock_ticker',
+	'description',
+	'branch',
+	'project',
+	'url_for_bestpractices',
+	'enduser',
+	'open_source',
+	'allow_duplicate_repo',
+	'unnamed_organization',
+	'organization',
+	'joined',
+	'extra'
+    ];
+    const fields = ['category', 'subcategory', 'id', 'item', ...allowedKeys];
+
+    const store = new Ext.data.JsonStore({
+        fields: fields
+    });
+
+    store.loadData(items);
+
+    const grid = new Ext.grid.Panel({
+	region: 'center',
+	store: store,
+	columns: [{
+	    text: 'Category',
+	    dataIndex: 'category',
+	    width: 150
+	}, {
+	    text: 'Subcategory',
+	    dataIndex: 'subcategory',
+	    width: 150
+	}, {
+	    text: 'Name',
+	    dataIndex: 'name',
+	    width: 150
+	}, {
+	    text: 'Crunchbase',
+	    dataIndex: 'crunchbase',
+	    renderer: (x) => x.replace('https://www.crunchbase.com/organization/', ''),
+	    width: 150
+	}]
+    });
+
+    const onUpdateEntry = function() {
+       var name = editor.down('[name=name]').getValue();
+       const item = sm.getSelection()[0];
+       item.set('name', name);
+    }
+
+    const editor = new Ext.Panel({
+        title: 'Edit selected item',
+	layout: 'form',
+	width: 500,
+	region: 'east',
+	defaults: {
+            width: 200
+	},
+	items: [{
+	    xtype: 'textfield',
+	    name: 'name',
+	    fieldLabel: 'Name:',
+	    description: 'A name of the item, should be unique'
+	}, {
+	    xtype: 'textfield',
+	    name: 'logo',
+	    fieldLabel: 'Logo:',
+	    qtip: 'Logo',
+	    description: 'A path to an svg file inside a host_logos folder'
+	}, {
+	    xtype: 'textfield',
+	    name: 'homepage_url',
+	    fieldLabel: 'Homepage url:',
+	    description: 'A full link to the homepage'
+	}, {
+	    xtype: 'textfield',
+	    name: 'twitter',
+	    fieldLabel: 'Twitter',
+	    description: 'Link to a working twitter. Should contain at least one tweet'
+	}, {
+	    xtype: 'textfield',
+	    name: 'crunchbase',
+	    fieldLabel: 'Crunchbase',
+	    description: 'A full url to the crunchbase entry. Allows to fetch additional information about the organization responsible for the entry'
+	}, {
+	    xtype: 'textfield',
+	    name: 'repo_url',
+	    fieldLabel: 'Github repo url',
+	    description: 'A full url to the github repository'
+	}, {
+	    xtype: 'textfield',
+	    name: 'project_org',
+	    fieldLabel: 'project_org',
+	    description: 'When a project belongs to multiple repositories, please provide this field'
+	}, {
+	    xtype: 'textfield',
+	    name: 'additional_repos',
+	    fieldLabel: 'Additional repos',
+	    description: 'Extra repositories to calculate stars and other statistic'
+	}, {
+	    xtype: 'textfield',
+	    name: 'stock_ticker',
+	    fieldLabel: 'Stock ticker',
+	    description: 'Allows to overrid a stock ticker when a stock ticker from a crunchbase is not correct'
+	}, {
+	    xtype: 'textarea',
+	    name: 'description',
+	    fieldLabel: 'Description',
+	    description: 'Provide a description to the filed here, if the one from the crunchbase is not good enough'
+	}, {
+	    xtype: 'textfield',
+	    name: 'branch',
+	    fieldLabel: 'branch',
+	    description: 'A branch on a github when a default one is not suitable'
+	}, {
+	    xtype: 'textfield',
+	    name: 'project',
+	    fieldLabel: 'project',
+	    description: 'Which internal project this entry belongs to'
+	}, {
+	    xtype: 'textfield',
+	    name: 'url_for_bestpractices',
+	    fieldLabel: 'url_for_bestpractices',
+	    description: 'When a project follows best practices, please provide an url here.'
+	}, {
+	    xtype: 'textfield',
+	    name:  'enduser',
+	    fieldLabel: 'enduser'
+	}, {
+	    xtype: 'checkbox',
+	    name: 'open_source',
+	    boxLabel: 'open_source'
+	}, {
+	    xtype: 'checkbox',
+	    name: 'allow_duplicate_repo',
+	    boxLabel: 'allow_duplicate_repo'
+	}, {
+	    xtype: 'checkbox',
+	    name: 'unnamed_organization',
+	    boxLabel: 'unnamed_organization'
+	}, {
+	    xtype: 'checkbox',
+	    name: 'unnamed_organization',
+	    boxLabel: 'unnamed_organization'
+	}, {
+	    xtype: 'textfield',
+	    name: 'organization',
+	    fieldLabel: 'organization'
+	}, {
+	    xtype: 'textfield',
+	    name: 'joined',
+	    fieldLabel: 'joined'
+	}, {
+	    xtype: 'panel',
+	    text: 'Selected Field Information',
+	    width: '100%',
+	    height: 100,
+	    layout: 'fit',
+	    items: [{ xtype: 'box' }]
+	}, {
+	    xtype: 'box',
+	    height: 20
+	}, {
+	    xtype: 'button',
+	    text: 'Update entry',
+	    scale: 'medium',
+	    handler: onUpdateEntry
+	}]
+    });
+
+    editor.on('afterrender', function() {
+	const fields = editor.query('[name]');
+	const panel = editor.down('[xtype=panel]');
+	for (var item of fields) {
+	    const updateDescription = function(item) {
+	        panel.setTitle('Info: ' + item.name);
+		panel.down('[xtype=box]').update(item.description || 'No description')
+	    }
+	    item.on('focus', updateDescription);
+	    item.on('mouseover', updateDescription);
+	}
+    });
+
+    const sm = grid.getSelectionModel();
+
+    async function saveChanges() {
+        const rows = store.getRange();
+	for (var category of content.landscape) {
+	    for (var subcategory of category.subcategories) {
+	        for (var item of subcategory.items) {
+		    const id = `${category.name}:${subcategory.name}:${item.name}`
+		    const data = rows.filter( (x) => x.get('id') === id)[0];
+		    item.name = data.get('name');
+		}
+	    }
+	}
+	const yml = yaml2json(content);
+        const fileHandle = await webFolder.getFileHandle('landscape.yml');
+	const stream = await fileHandle.createWritable();
+	await stream.write(yml);
+	await stream.close();
+
+	wnd.close();
+    }
+
+    const bottom = new Ext.Panel({
+        layout: 'absolute',
+	height: 50,
+	region: 'south',
+	items: [{
+	    xtype: 'button',
+	    scale: 'medium',
+	    text: 'Save settings.yml',
+	    x: 5,
+	    y: 5,
+	    handler: saveChanges
+	}, {
+	    xtype: 'button',
+	    text: 'Cancel',
+	    x: 1005,
+	    y: 5,
+	    handler: function() {
+                wnd.close();
+	    }
+	}]
+    });
+
+    const wnd = new Ext.Window({
+        title: 'landscape.yml online editor',
+	layout: 'border',
+	items: [grid, editor, bottom],
+	width: 1124,
+	height: 818
+    });
+    wnd.show();
+
+    sm.on('selectionchange', function() {
+	checkSelection();
+    });
+    function checkSelection() {
+        const item = sm.getSelection()[0];
+	const data = item.data;
+	if (!item) {
+	  editor.hide();
+	} else {
+          editor.show();
+	  editor.down('[name=name]').setValue(data.name);
+	  editor.down('[name=logo]').setValue(data.logo);
+	  editor.down('[name=homepage_url]').setValue(data.homepage_url);
+	  editor.down('[name=twitter]').setValue(data.twitter);
+	  editor.down('[name=crunchbase]').setValue(data.crunchbase);
+	  editor.down('[name=repo_url]').setValue(data.repo_url);
+	  editor.down('[name=project_org]').setValue(data.project_org);
+	  editor.down('[name=additional_repos]').setValue(data.additional_repos);
+	  editor.down('[name=stock_ticker]').setValue(data.stock_ticker);
+	  editor.down('[name=description]').setValue(data.description);
+	  editor.down('[name=branch]').setValue(data.branch);
+	  editor.down('[name=project]').setValue(data.project);
+	  editor.down('[name=url_for_bestpractices]').setValue(data.url_for_bestpractices);
+	  editor.down('[name=enduser]').setValue(data.enduser);
+	  editor.down('[name=open_source]').setValue(data.opensource);
+	  editor.down('[name=allow_duplicate_repo]').setValue(data.allow_duplicate_repo);
+	  editor.down('[name=unnamed_organization]').setValue(data.unnamed_organization);
+	  editor.down('[name=organization]').setValue(data.organization);
+	  editor.down('[name=joined]').setValue(data.joined);
+	}
+    }
+
+}
+
 async function collectAllFiles() {
     const files = {};
     const landscapeFiles = ['settings.yml', 'landscape.yml', 'processed_landscape.yml'];
@@ -80,6 +383,7 @@ async function getChangedFiles(lastSnapshot) {
 
 
 function init() {
+    Ext.QuickTips.enable();
     const tmpDiv = document.createElement('div');
     document.body.appendChild(tmpDiv);
     tmpDiv.outerHTML = `
@@ -89,6 +393,7 @@ function init() {
                 <input id="dir" type="button" value="1. Select folder with a landscape"></input>
                 <input id="run" type="button" value="2. Run yarn fetch"></input>
                 <input id="server" type="button" value="3. Run yarn dev"></input>
+                <input id="landscapeyml" type="button" value="Edit landscape.yml"></input>
                 <span id="overlay-wrapper"><input id="overlay" type="checkbox" checked></input><label for="overlay">Show Overlay</label></span>
                 <a href="/landscape" target="_blank">View Landscape</a>
                 <div id="status" style="display: inline-block; font-weight: bold;"></div>
@@ -171,6 +476,7 @@ function init() {
 
     const inputButton = mainDiv.querySelector('#run');
     const serverButton = mainDiv.querySelector('#server');
+    const landscapeYmlButton = mainDiv.querySelector('#landscapeyml');
     const dirButton = mainDiv.querySelector('#dir');
     const outputFetchDiv = mainDiv.querySelector('#output-fetch');
     const outputDevDiv = mainDiv.querySelector('#output-dev');
@@ -265,6 +571,17 @@ function init() {
         // outputFetchDiv.classList.add('overlay');
         // outputDevDiv.classList.add('overlay');
         outputDevDiv.classList.remove('collapsed');
+    });
+
+    landscapeYmlButton.addEventListener('click', async function() {
+        const handle = await webFolder.getFileHandle('landscape.yml');
+        const fileObj = await handle.getFile();
+        const landscapeYmlContent = await fileObj.text();
+	const content = jsyaml.load(landscapeYmlContent);
+	console.info(content);
+
+	editLandscapeYml(content);
+
     });
 
     function updateOverlayVisibility() {
