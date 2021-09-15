@@ -78,9 +78,30 @@ function editLandscapeYml(content) {
     });
 
     const onUpdateEntry = function() {
-       var name = editor.down('[name=name]').getValue();
        const item = sm.getSelection()[0];
-       item.set('name', name);
+       const assign = function(name) {
+	   var value = editor.down(`[name=${name}]`).getValue();
+	   if (value === "null") {
+              value = null;
+	   }
+	   item.set(name, value);
+       }
+       assign('name');
+       assign('homepage_url');
+       assign('logo');
+       assign('twitter');
+       assign('crunchbase');
+       assign('repo_url');
+       assign('project_org');
+       assign('additional_repos');
+       assign('stock_ticker');
+       assign('description');
+       assign('branch');
+       assign('project');
+       assign('url_for_bestpractices');
+       assign('enduser');
+       assign('organization');
+       assign('joined');
     }
 
     const editor = new Ext.Panel({
@@ -225,7 +246,16 @@ function editLandscapeYml(content) {
 	        for (var item of subcategory.items) {
 		    const id = `${category.name}:${subcategory.name}:${item.name}`
 		    const data = rows.filter( (x) => x.get('id') === id)[0];
-		    item.name = data.get('name');
+
+		    for (var key of allowedKeys) {
+		        const value = data.get(key);
+			if (value !== '') {
+                           item[key] = value;
+			} else {
+                           delete item[key];
+			}
+		    }
+
 		}
 	    }
 	}
@@ -278,26 +308,33 @@ function editLandscapeYml(content) {
 	if (!item) {
 	  editor.hide();
 	} else {
-          editor.show();
-	  editor.down('[name=name]').setValue(data.name);
-	  editor.down('[name=logo]').setValue(data.logo);
-	  editor.down('[name=homepage_url]').setValue(data.homepage_url);
-	  editor.down('[name=twitter]').setValue(data.twitter);
-	  editor.down('[name=crunchbase]').setValue(data.crunchbase);
-	  editor.down('[name=repo_url]').setValue(data.repo_url);
-	  editor.down('[name=project_org]').setValue(data.project_org);
-	  editor.down('[name=additional_repos]').setValue(data.additional_repos);
-	  editor.down('[name=stock_ticker]').setValue(data.stock_ticker);
-	  editor.down('[name=description]').setValue(data.description);
-	  editor.down('[name=branch]').setValue(data.branch);
-	  editor.down('[name=project]').setValue(data.project);
-	  editor.down('[name=url_for_bestpractices]').setValue(data.url_for_bestpractices);
-	  editor.down('[name=enduser]').setValue(data.enduser);
-	  editor.down('[name=open_source]').setValue(data.opensource);
-	  editor.down('[name=allow_duplicate_repo]').setValue(data.allow_duplicate_repo);
-	  editor.down('[name=unnamed_organization]').setValue(data.unnamed_organization);
-	  editor.down('[name=organization]').setValue(data.organization);
-	  editor.down('[name=joined]').setValue(data.joined);
+	    editor.show();
+	    const assign = function(name) {
+		let value = item.get(name);
+		if (value === null) {
+		    value = "null";
+		}
+		editor.down(`[name=${name}]`).setValue(value);
+	    }
+	    assign('name');
+	    assign('homepage_url');
+	    assign('logo');
+	    assign('twitter');
+	    assign('crunchbase');
+	    assign('repo_url');
+	    assign('project_org');
+	    assign('additional_repos');
+	    assign('stock_ticker');
+	    assign('description');
+	    assign('branch');
+	    assign('project');
+	    assign('url_for_bestpractices');
+	    assign('enduser');
+	    assign('open_source');
+	    assign('allow_duplicate_repo');
+	    assign('unnamed_organization');
+	    assign('organization');
+	    assign('joined');
 	}
     }
 
