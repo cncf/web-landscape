@@ -3,6 +3,7 @@ console.info('test');
 function yaml2json(content) {
     var dump = jsyaml.dump(content, {lineWidth: 160});
     dump = dump.replace(/(- \w+:) null/g, '$1');
+    dump = dump.replace(/(- \w+:) ''/g, '$1');
     dump = dump.split("\n").filter((x) => x.indexOf('!<tag:yaml.org,2002:js/undefined>') === -1).join("\n");
     return dump;
 }
@@ -16,6 +17,7 @@ function editLandscapeYml(content) {
 		    category: category.name,
 		    subcategory: subcategory.name,
 		    id: `${category.name}:${subcategory.name}:${item.name}`,
+                    original: item,
 		    ...item
 		});
 	    }
@@ -26,27 +28,28 @@ function editLandscapeYml(content) {
 
     const allowedKeys = [
 	'name',
+	'description',
 	'homepage_url',
-	'logo',
-	'twitter',
-	'crunchbase',
+	'project',
 	'repo_url',
+	'branch',
 	'project_org',
+	'url_for_bestpractices',
 	'additional_repos',
 	'stock_ticker',
-	'description',
-	'branch',
-	'project',
-	'url_for_bestpractices',
+	'logo',
 	'enduser',
 	'open_source',
+	'twitter',
+	'crunchbase',
 	'allow_duplicate_repo',
-	'unnamed_organization',
-	'organization',
 	'joined',
-	'extra'
+	'extra',
+	'organization',
+	'unnamed_organization'
     ];
-    const fields = ['category', 'subcategory', 'id', 'item', ...allowedKeys];
+
+    const fields = ['category', 'subcategory', 'id', 'item', 'original', ...allowedKeys];
 
     const store = new Ext.data.JsonStore({
         fields: fields
@@ -57,6 +60,28 @@ function editLandscapeYml(content) {
     const grid = new Ext.grid.Panel({
 	region: 'center',
 	store: store,
+        tbar: [{
+            xtype: 'button',
+            text: 'Add new item',
+            handler: function() {
+                const selectedRecord = sm.getSelection()[0];
+                const newEntry = {
+                    category: selectedRecord ? selectedRecord.get('category') : '',
+                    subcategory: selectedRecord ? selectedRecord.get('subcategory') : ''
+                }
+                const record = store.add(newEntry);
+                sm.select(record);
+            }
+        }, '-', {
+            xtype: 'button',
+            text: 'Delete item',
+            handler: function() {
+                const record = sm.getSelection()[0];
+                if (record) {
+                    record.store.remove(record);
+                }
+            }
+        }],
 	columns: [{
 	    text: 'Category',
 	    dataIndex: 'category',
@@ -79,6 +104,9 @@ function editLandscapeYml(content) {
 
     const onUpdateEntry = function() {
        const item = sm.getSelection()[0];
+       if (!item) {
+           return;
+       }
        const assign = function(name) {
 	   var value = editor.down(`[name=${name}]`).getValue();
 	   if (value === "null") {
@@ -86,6 +114,8 @@ function editLandscapeYml(content) {
 	   }
 	   item.set(name, value);
        }
+       assign('category');
+       assign('subcategory');
        assign('name');
        assign('homepage_url');
        assign('logo');
@@ -102,6 +132,9 @@ function editLandscapeYml(content) {
        assign('enduser');
        assign('organization');
        assign('joined');
+       if (editor.focusedElement) {
+            editor.focusedElement.focus();
+       }
     }
 
     const editor = new Ext.Panel({
@@ -110,13 +143,50 @@ function editLandscapeYml(content) {
 	width: 500,
 	region: 'east',
 	defaults: {
-            width: 200
+            width: 190
 	},
-	items: [{
-	    xtype: 'textfield',
-	    name: 'name',
-	    fieldLabel: 'Name:',
-	    description: 'A name of the item, should be unique'
+        items: [
+            {
+                xtype: 'combo',
+                name: 'category',
+                fieldLabel: 'Category',
+                displayField: 'name',
+                valueField: 'id',
+                width: 120,
+                store: new Ext.data.JsonStore({
+                    fields: ['id', 'name'],
+                    data: content.landscape.map( (x) => ({ id: x.name, name: x.name }))
+                }),
+                editable: false,
+                value: 'all',
+                queryMode: 'local',
+                selectOnFocus: false,
+                triggerAction: 'all',
+                autoSelect: true,
+                forceSelection: true
+            }, {
+                xtype: 'combo',
+                name: 'subcategory',
+                fieldLabel: 'Subcategory',
+                displayField: 'name',
+                valueField: 'id',
+                width: 120,
+                store: new Ext.data.JsonStore({
+                    fields: ['id', 'name'],
+                    data: []
+                }),
+                editable: false,
+                value: 'all',
+                queryMode: 'local',
+                selectOnFocus: false,
+                triggerAction: 'all',
+                autoSelect: true,
+                forceSelection: true
+            }, {
+                xtype: 'textfield',
+                name: 'name',
+            fieldLabel: 'Name:',
+            description: 'A name of the item, should be unique'
 	}, {
 	    xtype: 'textfield',
 	    name: 'logo',
@@ -195,10 +265,6 @@ function editLandscapeYml(content) {
 	    name: 'unnamed_organization',
 	    boxLabel: 'unnamed_organization'
 	}, {
-	    xtype: 'checkbox',
-	    name: 'unnamed_organization',
-	    boxLabel: 'unnamed_organization'
-	}, {
 	    xtype: 'textfield',
 	    name: 'organization',
 	    fieldLabel: 'organization'
@@ -213,14 +279,6 @@ function editLandscapeYml(content) {
 	    height: 100,
 	    layout: 'fit',
 	    items: [{ xtype: 'box' }]
-	}, {
-	    xtype: 'box',
-	    height: 20
-	}, {
-	    xtype: 'button',
-	    text: 'Update entry',
-	    scale: 'medium',
-	    handler: onUpdateEntry
 	}]
     });
 
@@ -233,33 +291,62 @@ function editLandscapeYml(content) {
 		panel.down('[xtype=box]').update(item.description || 'No description')
 	    }
 	    item.on('focus', updateDescription);
+            item.on('focus', (cmp) => editor.focusedElement = cmp );
 	    item.on('mouseover', updateDescription);
 	}
+        editor.down('[name=category]').on('change', function() {
+            updateSubcategoryList();
+        });
+        editor.timeoutId = setInterval(onUpdateEntry, 500);
     });
+    editor.on('destroy', function() { clearTimeout(editor.timeoutId) });
 
     const sm = grid.getSelectionModel();
 
     async function saveChanges() {
         const rows = store.getRange();
-	for (var category of content.landscape) {
-	    for (var subcategory of category.subcategories) {
-	        for (var item of subcategory.items) {
-		    const id = `${category.name}:${subcategory.name}:${item.name}`
-		    const data = rows.filter( (x) => x.get('id') === id)[0];
+	const newContent = { landscape: [] };
+	const categories = {};
+	const subcategories = {};
 
-		    for (var key of allowedKeys) {
-		        const value = data.get(key);
-			if (value !== '') {
-                           item[key] = value;
-			} else {
-                           delete item[key];
-			}
-		    }
+	for (var record of rows) {
+	    const categoryKey = record.get('category');
+	    if (!categories[categoryKey]) {
+	        categories[categoryKey] = {
+		    category: '',
+		    name: categoryKey,
+		    subcategories: []
+		}
+		newContent.landscape.push(categories[categoryKey]);
+	    }
+	    const subcategoryKey = `${record.get('category')}:${record.get('subcategory')}`;
+	    if (!subcategories[subcategoryKey]) {
+	        subcategories[subcategoryKey] = {
+		    subcategory: '',
+		    name: record.get('subcategory'),
+		    items: []
+		}
+		categories[categoryKey].subcategories.push(subcategories[subcategoryKey]);
+	    }
 
+	    const item = record.get('original') || {
+	        item: ''
+	    };
+
+	    for (var key of allowedKeys) {
+		const value = record.get(key);
+		if (value !== '') {
+		    item[key] = value;
+		} else {
+		    delete item[key];
 		}
 	    }
+
+	    subcategories[subcategoryKey].items.push(item);
+
 	}
-	const yml = yaml2json(content);
+
+	const yml = yaml2json(newContent);
         const fileHandle = await webFolder.getFileHandle('landscape.yml');
 	const stream = await fileHandle.createWritable();
 	await stream.write(yml);
@@ -302,13 +389,25 @@ function editLandscapeYml(content) {
     sm.on('selectionchange', function() {
 	checkSelection();
     });
+    checkSelection();
+
+    function updateSubcategoryList() {
+        const category = editor.down('[name=category]').getValue();
+        const categoryEntry = content.landscape.filter( (x) => x.name === category)[0];
+        let list = [];
+        if (categoryEntry) {
+            list = categoryEntry.subcategories.map( (x) => ({ id: x.name, name: x.name }));
+        }
+        editor.down('[name=subcategory]').store.loadData(list);
+    }
+
     function checkSelection() {
         const item = sm.getSelection()[0];
-	const data = item.data;
 	if (!item) {
-	  editor.hide();
+	  editor.mask();
 	} else {
-	    editor.show();
+            const data = item.data;
+	    editor.unmask();
 	    const assign = function(name) {
 		let value = item.get(name);
 		if (value === null) {
@@ -316,6 +415,9 @@ function editLandscapeYml(content) {
 		}
 		editor.down(`[name=${name}]`).setValue(value);
 	    }
+            assign('category');
+            updateSubcategoryList();
+            assign('subcategory');
 	    assign('name');
 	    assign('homepage_url');
 	    assign('logo');
