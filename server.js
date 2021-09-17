@@ -121,6 +121,74 @@ app.post('/api/upload', async function(req, res) {
     await uploadFiles(req, res);
 });
 
+app.post('/api/connect', async function(req, res) {
+
+    const repoUrl = `https://$GITHUB_USER:$GITHUB_TOKEN@github.com/${req.body.repo}`;
+    const branch = `web-landscape-${req.body.branch}`;
+
+    const socketId = req.body.socketId;
+    const clientSocket = webSocketServer.allClients[socketId];
+    console.info({socketId});
+    if (!clientSocket) {
+        res.json({success: false, message: 'Not valid socketId: ' + socketId, clients: Object.keys(webSocketServer.allClients)});
+        return;
+    }
+
+    const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
+    await fs.mkdir(tmpPath, { recursive: true});
+
+    const cmd = `git clone ${repoUrl} . && (git checkout -t origin/${branch} || git checkout -b ${branch})`;
+    const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
+
+    pid.stdout.on('data', (data) => {
+        clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
+    });
+
+    pid.stderr.on('data', (data) => {
+        clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
+    });
+
+    pid.on('close', async (code) => {
+        clientSocket.send(JSON.stringify({type: 'finish', target: 'connect', code }));
+        res.json({success: true, pid: pid.pid});
+    });
+
+});
+
+// get a content of a single file
+app.post('/api/download-file', async function(req, res) {
+
+    const socketId = req.body.socketId;
+    const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
+    const content = await fs.readFile(path.resolve(tmpPath, req.body.dir || '', req.body.name), 'utf-8');
+    res.json({success: true, content: content });
+
+});
+
+app.post('/api/upload-file', async function(req, res) {
+    const socketId = req.body.socketId;
+    const clientSocket = webSocketServer.allClients[socketId];
+    const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
+    await fs.writeFile(path.resolve(tmpPath, req.body.dir || '', req.body.name), req.body.content);
+
+    const cmd = `git add . && git commit -m 'update ${req.body.name}' && git push origin HEAD`;
+    const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
+
+    pid.stdout.on('data', (data) => {
+        clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
+    });
+
+    pid.stderr.on('data', (data) => {
+        clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
+    });
+
+    pid.on('close', async (code) => {
+        clientSocket.send(JSON.stringify({type: 'finish', target: 'connect', code }));
+        res.json({success: true, code: code });
+    });
+});
+
+
 
 
 app.post('/api/fetch', async (req, res) => {

@@ -1,4 +1,58 @@
-console.info('test');
+// a remote backend is used when we checkout a branch on a server
+const remoteBackend = {
+    type: 'remote',
+    readFile: async function({dir, name}) {
+        const content = await fetch(`/api/download-file`, {
+            body: JSON.stringify({
+                socketId: window.socketId,
+                dir,
+                name
+            }),
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json' 
+            }
+
+        });
+        const json = await content.json();
+        return json.content;
+    },
+
+    writeFile: async function({dir, name, content}) {
+        await fetch(`/api/upload-file`, {
+            body: JSON.stringify({
+                socketId: window.socketId,
+                dir,
+                content,
+                name
+            }),
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json' 
+            }
+        });
+    }
+}
+
+const localBackend = {
+    type: 'local',
+    readFile: async function({dir, name}) {
+        const handle = await webFolder.getFileHandle(name);
+        const fileObj = await handle.getFile();
+        const landscapeYmlContent = await fileObj.text();
+    },
+    writeFile: async function({dir, name, content}) {
+        const fileHandle = await webFolder.getFileHandle(name);
+	const stream = await fileHandle.createWritable();
+	await stream.write(yml);
+	await stream.close();
+    }
+}
+window.activeBackend = null;
+
+
 
 function yaml2json(content) {
     var dump = jsyaml.dump(content, {lineWidth: 160});
@@ -347,10 +401,7 @@ function editLandscapeYml(content) {
 	}
 
 	const yml = yaml2json(newContent);
-        const fileHandle = await webFolder.getFileHandle('landscape.yml');
-	const stream = await fileHandle.createWritable();
-	await stream.write(yml);
-	await stream.close();
+        await activeBackend.writeFile({name: 'landscape.yml', content: yml});
 
 	wnd.close();
     }
@@ -520,6 +571,96 @@ async function getChangedFiles(lastSnapshot) {
     return Object.values(files).concat(removedFiles);
 }
 
+function showGithubSelector() {
+
+    function generateBranchName() {
+        return new Date().toISOString().substring(0, 16).replace(':','-');
+    }
+
+
+    const form = new Ext.Container({
+        layout: 'form',
+        items: [{
+            xtype: 'combo',
+            name: 'repo',
+            fieldLabel: 'Repository',
+            displayField: 'name',
+            valueField: 'id',
+            width: 120,
+            store: new Ext.data.JsonStore({
+                fields: ['id', 'name'],
+                data: ['cncf/landscape'].map( (x) => ({id: x, name: x}))
+            }),
+            editable: false,
+            value: 'cncf/landscape',
+            queryMode: 'local',
+            selectOnFocus: false,
+            triggerAction: 'all',
+            autoSelect: true,
+            forceSelection: true
+        }, {
+            xtype: 'textfield',
+            name: 'branch',
+            fieldLabel: 'Branch',
+            value: window.localStorage.getItem('branch') || generateBranchName()
+        }, {
+            name: 'change',
+            xtype: 'button',
+            width: 120,
+            text: 'Change branch name'
+        }, {
+            xtype: 'box',
+            height: 20
+        }, {
+            name: 'connect',
+            xtype: 'button',
+            scale: 'large',
+            text: 'CONNECT'
+        }]
+    })
+
+    const wnd = new Ext.Window({
+        modal: true,
+        width: 300,
+        height: 200,
+        title: 'Choose a github repo and a branch name',
+        items: [form]
+    });
+    wnd.show();
+
+    wnd.down('[name=change]').on('click', function() {
+        wnd.down('[name=branch]').setValue(generateBranchName());
+        window.localStorage.setItem('branch', wnd.down('[name=branch]').getValue());
+    });
+
+    wnd.down('[name=branch]').on('change', function() {
+        window.localStorage.setItem('branch', wnd.down('[name=branch]').getValue());
+    });
+
+    wnd.down('[name=connect]').on('click', async function() {
+        const repo = wnd.down('[name=repo]').getValue();
+        const branch = wnd.down('[name=branch]').getValue();
+        window.localStorage.setItem('branch', branch);
+
+        await fetch('api/connect', {
+            body: JSON.stringify({
+                socketId: window.socketId,
+                repo,
+                branch
+            }),
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json' 
+            }
+        });
+
+        window.activeBackend = remoteBackend;
+        wnd.close();
+    });
+
+}
+
 
 function init() {
     Ext.QuickTips.enable();
@@ -529,7 +670,9 @@ function init() {
         <div id="main" style="height: 100%;">
             <div style="height: 40px; background: #ddd;">
                 <span style="font-size: 24px;"><b>yarn fecth demo</b></span>
-                <input id="dir" type="button" value="1. Select folder with a landscape"></input>
+                <input id="dir" type="button" value="1a. Select folder with a landscape"></input>
+                <span>or</span>
+                <input id="github" type="button" value="1b. Select a github repository"></input>
                 <input id="run" type="button" value="2. Run yarn fetch"></input>
                 <input id="server" type="button" value="3. Run yarn dev"></input>
                 <input id="landscapeyml" type="button" value="Edit landscape.yml"></input>
@@ -617,6 +760,8 @@ function init() {
     const serverButton = mainDiv.querySelector('#server');
     const landscapeYmlButton = mainDiv.querySelector('#landscapeyml');
     const dirButton = mainDiv.querySelector('#dir');
+    const githubButton = mainDiv.querySelector('#github');
+
     const outputFetchDiv = mainDiv.querySelector('#output-fetch');
     const outputDevDiv = mainDiv.querySelector('#output-dev');
     const statusDiv = mainDiv.querySelector('#status');
@@ -713,9 +858,7 @@ function init() {
     });
 
     landscapeYmlButton.addEventListener('click', async function() {
-        const handle = await webFolder.getFileHandle('landscape.yml');
-        const fileObj = await handle.getFile();
-        const landscapeYmlContent = await fileObj.text();
+        const landscapeYmlContent = await activeBackend.readFile({name: 'landscape.yml'});
 	const content = jsyaml.load(landscapeYmlContent);
 	console.info(content);
 
@@ -738,8 +881,11 @@ function init() {
         if (permission !== 'granted') {
             console.info('Permission to the folder was not provided');
         }
+        window.activeBackend = localBackend;
         enableButtons();
     });
+
+    githubButton.addEventListener('click', showGithubSelector);
 
     outputDevDiv.querySelector('.switch').addEventListener('click', function() {
         outputDevDiv.classList.toggle('collapsed');
