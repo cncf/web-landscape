@@ -39,14 +39,17 @@ const remoteBackend = {
 const localBackend = {
     type: 'local',
     readFile: async function({dir, name}) {
-        const handle = await webFolder.getFileHandle(name);
+        const dirHandle = dir ? await webFolder.getDirectoryHandle(dir) : webFolder;
+        const handle = await dirHandle.getFileHandle(name);
         const fileObj = await handle.getFile();
         const landscapeYmlContent = await fileObj.text();
+        return landscapeYmlContent;
     },
     writeFile: async function({dir, name, content}) {
-        const fileHandle = await webFolder.getFileHandle(name);
-	const stream = await fileHandle.createWritable();
-	await stream.write(yml);
+        const dirHandle = dir ? await webFolder.getDirectoryHandle(dir) : webFolder;
+        const handle = await dirHandle.getFileHandle(name, { create: true });
+	const stream = await handle.createWritable();
+	await stream.write(content);
 	await stream.close();
     }
 }
@@ -156,7 +159,7 @@ function editLandscapeYml(content) {
 	}]
     });
 
-    const onUpdateEntry = function() {
+    const onUpdateEntry = async function() {
        const item = sm.getSelection()[0];
        if (!item) {
            return;
@@ -189,6 +192,19 @@ function editLandscapeYml(content) {
        if (editor.focusedElement) {
             editor.focusedElement.focus();
        }
+    
+       // update img
+       const img = editor.down(`[name=logo]`).getValue();
+       if (img && img !== editor.previousImg) {
+           editor.previousImg = img;
+           const imgEl = editor.down('[isImage]').el.dom;
+           try {
+                const svg = await activeBackend.readFile({dir: 'hosted_logos', name: img});
+                imgEl.src= "data:image/svg+xml;base64," + btoa(svg);
+           } catch(ex) {
+               imgEl.src = "";
+           }
+       }
     }
 
     const editor = new Ext.Panel({
@@ -196,6 +212,9 @@ function editLandscapeYml(content) {
 	layout: 'form',
 	width: 500,
 	region: 'east',
+        bodyStyle: {
+            overflowY: 'auto'
+        },
 	defaults: {
             width: 190
 	},
@@ -247,7 +266,37 @@ function editLandscapeYml(content) {
 	    fieldLabel: 'Logo:',
 	    qtip: 'Logo',
 	    description: 'A path to an svg file inside a host_logos folder'
-	}, {
+        }, {
+            xtype: 'container',
+            id: 'preview',
+            height: 60,
+            layout: { type: 'absolute' },
+            items: [{
+                xtype: 'box',
+                width: 180,
+                height: 60,
+                x: 105,
+                y: 0,
+                isImage: true,
+                autoEl: {
+                    tag: 'img',
+                    styles: { border: '1px solid green' }
+                }
+            }, {
+                x: 295,
+                y: 0,
+                xtype: 'box',
+                width: 100,
+                height: 60,
+                isUpload: true,
+                autoEl: {
+                    tag: 'input',
+                    accept: '*.svg',
+                    type: 'file',
+                    value: 'Choose a file to upload...'
+                }
+            }]
+        }, {
 	    xtype: 'textfield',
 	    name: 'homepage_url',
 	    fieldLabel: 'Homepage url:',
@@ -352,6 +401,22 @@ function editLandscapeYml(content) {
             updateSubcategoryList();
         });
         editor.timeoutId = setInterval(onUpdateEntry, 500);
+
+        editor.down('[isUpload]').el.on('change', function(e, dom) {
+            const fileInfo = dom.files[0];
+            if (fileInfo) {
+                let fileReader = new FileReader();
+                fileReader.onload = async function(event) {
+                    const content = fileReader.result;
+                    const fileName = editor.down(`[name=logo]`).getValue();
+                    await activeBackend.writeFile({dir: 'hosted_logos', name: fileName, content: content });
+                    editor.previousImg = -1; // to trigger the redraw
+                    dom.value = '';
+                };
+                fileReader.readAsText(fileInfo);
+            }
+        });
+
     });
     editor.on('destroy', function() { clearTimeout(editor.timeoutId) });
 
