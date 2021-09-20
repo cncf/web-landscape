@@ -297,6 +297,11 @@ app.use('/api/status', function(req, res) {
 
 });
 
+app.use(function (err, req, res, next) {
+  console.error(err.stack)
+  res.status(500).send('Something broke!')
+})
+
 
 const server = httpsInfo ? require('https').createServer(httpsInfo, app) : require('http').createServer(app);
 const webSocketServer = new WebSocket.Server({ server });
