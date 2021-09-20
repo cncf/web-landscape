@@ -160,16 +160,25 @@ app.post('/api/download-file', async function(req, res) {
 
     const socketId = req.body.socketId;
     const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
-    const content = await fs.readFile(path.resolve(tmpPath, req.body.dir || '', req.body.name), 'utf-8');
-    res.json({success: true, content: content });
-
+    try {
+        const content = await fs.readFile(path.resolve(tmpPath, req.body.dir || '', req.body.name), 'utf-8');
+        res.json({success: true, content: content });
+    } catch(ex) {
+        res.json({success: false, content: '' });
+    }
 });
 
 app.post('/api/upload-file', async function(req, res) {
     const socketId = req.body.socketId;
     const clientSocket = webSocketServer.allClients[socketId];
     const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
-    await fs.writeFile(path.resolve(tmpPath, req.body.dir || '', req.body.name), req.body.content);
+    try {
+        await fs.writeFile(path.resolve(tmpPath, req.body.dir || '', req.body.name), req.body.content);
+    } catch(ex) {
+        res.status(404);
+        res.end('failed');
+        return;
+    }
 
     const cmd = `git add . && git commit -m 'update ${req.body.name}' && git push origin HEAD`;
     const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
