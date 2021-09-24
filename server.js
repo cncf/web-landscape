@@ -18,7 +18,7 @@ const tmpFolder = process.env.TMP_FOLDER || 'tmp';
 const landscapeAppFolder = process.env.LANDSCAPEAPP_FOLDER || "../landscapeapp";
 let serverPort = 3010;
 const maxServers = 20;
-const maxTimeoutInMinutes = 15;
+const maxTimeoutInMinutes = 120;
 
 const serverData = {};
 
@@ -225,11 +225,28 @@ app.post('/api/fetch', async (req, res) => {
     });
 
     pid.on('close', async (code) => {
-        clientSocket.send(JSON.stringify({type: 'finish', code }));
-        const files = await utils.collectFiles(tmpPath);
-        const diff = utils.calculateDifference({oldFiles: req.body.files, newFiles: files});
-        console.info('Got files: ', files.length, 'Diff: ', diff.length);
-        clientSocket.send(JSON.stringify({type: 'files', files: diff }));
+        if (req.body.files) {
+            const files = await utils.collectFiles(tmpPath);
+            const diff = utils.calculateDifference({oldFiles: req.body.files, newFiles: files});
+            console.info('Got files: ', files.length, 'Diff: ', diff.length);
+            clientSocket.send(JSON.stringify({type: 'files', files: diff }));
+            clientSocket.send(JSON.stringify({type: 'finish', code }));
+        } else {
+            const cmd = `git add . && git commit -m 'yarn fetch' && git push origin HEAD`;
+            const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
+
+            pid.stdout.on('data', (data) => {
+                clientSocket.send(JSON.stringify({type: 'message', target: 'fetch', text: data.toString()}));
+            });
+
+            pid.stderr.on('data', (data) => {
+                clientSocket.send(JSON.stringify({type: 'message', target: 'fetch', text: data.toString()}));
+            });
+
+            pid.on('close', async (code) => {
+                clientSocket.send(JSON.stringify({type: 'finish', target: 'fetch', code }));
+            });
+        }
     });
     res.json({success: true, pid: pid.pid});
 });

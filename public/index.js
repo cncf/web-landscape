@@ -1,4 +1,5 @@
 // a remote backend is used when we checkout a branch on a server
+const isChrome = !!navigator.userAgent.match(/Chrome\/(\S+)/);
 const remoteBackend = {
     type: 'remote',
     getDescription: () => `${remoteBackend.repo}#${remoteBackend.branch}`,
@@ -68,9 +69,6 @@ function yaml2json(content) {
 }
 
 
-function editLandscapeYml(content) {
-
-}
 
 async function collectAllFiles() {
     const files = {};
@@ -234,10 +232,10 @@ function attachWebsocket() {
             });
         }
         if (data.type === 'finish') {
-            statusDiv.innerText = `Waiting for updated files`;
+            Ext.globalEvents.fireEvent('finish');
         }
         if( data.type === 'files') {
-            statusDiv.innerText = `Got files to update : ${data.files.length}`;
+            Ext.globalEvents.fireEvent('filesstarted', data.files.length);
             for (let entry of data.files) {
                 const parts = entry.file.split('/');
                 const { dirHandle, fileHandle } = await (async function() {
@@ -260,10 +258,8 @@ function attachWebsocket() {
                     console.info('file saved! ', entry.file);
                 }
             }
-            statusDiv.innerText = `Fetch finished. ${data.files.length} files updated`;
-            serverButton.disabled = false;
+            Ext.globalEvents.fireEvent('filesfinished', data.files.length);
             window.allFiles = await collectAllFiles();
-            enableButtons();
         }
     };
 }
@@ -271,7 +267,7 @@ function attachWebsocket() {
 function getInitialForm() {
     const githubSelector = getGithubSelector();
     const initialForm = Ext.ComponentMgr.create({
-        height: 600,
+        height: 800,
         xtype: 'panel',
         title: 'Online landscape editor',
         bodyPadding: 10,
@@ -280,6 +276,7 @@ function getInitialForm() {
             listeners: {
                 render: function() {
                     this.update(`
+                            <img src="images/cncf-color.svg">
                             <h1> Welcome to CNCF online landscape editor. </h1>
 
                             <p>
@@ -344,7 +341,17 @@ function getInitialForm() {
                     width: 300,
                     xtype: 'button',
                     scale: 'large',
-                    text: 'Connect to your local folder'
+                    text: 'Connect to your local folder',
+                    hidden: !isChrome
+                } , {
+                    x: 5,
+                    y: 20,
+                    xtype: 'box',
+                    autoEl: {
+                        style: { color: 'red', fontSize: 16 },
+                        cn: 'Chrome browser version 87 or later is required to work with your local folder'
+                    },
+                    hidden: isChrome
                 }]
             }]
         }, {
@@ -571,6 +578,7 @@ async function getLandscapeYmlEditor() {
     const editor = new Ext.Panel({
         title: 'Edit selected item',
         layout: 'form',
+        bodyPadding: 10,
         width: 500,
         region: 'east',
         bodyStyle: {
@@ -867,7 +875,7 @@ async function getLandscapeYmlEditor() {
     sm.on('selectionchange', function() {
         checkSelection();
     });
-    mainContainer.on('render', () => checkSelection());
+    mainContainer.on('afterrender', () => checkSelection(), this, { delay: 1});
 
     function updateSubcategoryList() {
         const category = editor.down('[name=category]').getValue();
@@ -921,8 +929,217 @@ async function getLandscapeYmlEditor() {
     return mainContainer;
 }
 
+function getYarnFetchPanel() {
+    const panel = new Ext.Panel({
+        bodyPadding: 10,
+        title: 'Fetch external data',
+        layout: {
+            type: 'vbox',
+            align: 'stretch'
+        },
+        items: [{
+            xtype: 'box',
+            autoEl: {
+                cn: `Click 'Fetch' to get external data. The output is added to logs. Usually it takes 30 seconds`
+            }
+        }, {
+            xtype: 'container',
+            layout: {
+                type: 'vbox',
+                align: 'center'
+            },
+            height: 70,
+            items: [{
+                itemId: 'fetch',
+                height: 50,
+                width: 300,
+                xtype: 'button',
+                scale: 'large',
+                text: 'FETCH'
+            }]
+        }, {
+            xtype: 'box',
+            itemId: 'terminal',
+            flex: 1,
+            cls: 'output'
+        }]
+    });
+
+    const button = panel.down('#fetch');
+    const addMessage = function(text) {
+        const textEl = document.createElement('span');
+        textEl.innerText = text + '\n';
+        panel.down('#terminal').el.dom.appendChild(textEl);
+    }
+
+    Ext.globalEvents.on('message', function(data) {
+        if (data.target === 'fetch') {
+            const textEl = document.createElement('span');
+            textEl.innerText = data.text;
+            panel.down('#terminal').el.dom.appendChild(textEl);
+        }
+    });
+
+    Ext.globalEvents.on('finish', function() {
+        addMessage('Finished fetching data');
+        button.enable();
+        button.setText('FETCH');
+    });
+
+    Ext.globalEvents.on('filesstarted', function(count) {
+        addMessage(`${count} files changed. Receiving content`);
+    });
+    Ext.globalEvents.on('filesfinished', function(count) {
+        addMessage(`All ${count} local files have been updated`);
+    });
+
+    panel.down('#fetch').on('click', async function() {
+        button.disable();
+        button.setText('Fecthing data, please wait ...')
+
+
+        let files = null;
+        if (activeBackend.type === 'local') {
+            addMessage(`Collecting local files`);
+            files = await collectAllFiles();
+            window.allFiles = files;
+            addMessage(`Uploading local files`);
+        }
+
+        await fetch('api/fetch', {
+            body: JSON.stringify({ socketId: socketId, files: files ? Object.values(files) : null}),
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json' 
+            }
+        });
+
+        addMessage( `Fecthing data at ${new Date().toISOString().substring(0, 20)}`);
+    });
+
+    return panel;
+}
+
+function getPreviewPanel() {
+    const panel = new Ext.Container({
+        bodyPadding: 10,
+        layout: 'border',
+        items: [{
+            region: 'north',
+            height: 40,
+            items: [{
+                layout: 'absolute',
+                xtype: 'container',
+                items: [{
+                    itemId: 'start',
+                    xtype: 'button',
+                    x: 20,
+                    y: 5,
+                    text: 'Start dev server',
+                }]
+            }]
+        }, {
+            region: 'center',
+            xtype: 'box',
+            itemId: 'iframe',
+            autoEl: {
+                tag: 'iframe',
+                style: "border: 0; position: absolute; z-index: 1; width: 100%; height: 100%; left: 0; top: 0;"
+            }
+        }, {
+            xtype: 'box',
+            region: 'east',
+            width: 400,
+            cls: 'output',
+            itemId: 'terminal'
+        }]
+    });
+
+    const addMessage = function(text) {
+        const textEl = document.createElement('span');
+        textEl.innerText = text + '\n';
+        panel.down('#terminal').el.dom.appendChild(textEl);
+    }
+
+    Ext.globalEvents.on('message', function(data) {
+        if (data.target === 'server') {
+            const textEl = document.createElement('span');
+            textEl.innerText = data.text;
+            panel.down('#terminal').el.dom.appendChild(textEl);
+        }
+    });
+
+    panel.down('#start').on('click', async function() {
+        panel.down('#start').disable();
+        let files = null;
+        if (activeBackend.type === 'local') {
+            addMessage(`Collecting local files`);
+            files = await collectAllFiles();
+            window.allFiles = files;
+            addMessage(`Uploading local files`);
+        }
+
+        await fetch('api/server', {
+            body: JSON.stringify({ socketId: socketId, files: files ? Object.values(files) : null}),
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json' 
+            }
+        });
+
+        addMessage(`Dev server started`);
+
+        panel.down('#start').setText('Dev server is already running');
+
+        const iframeTag = panel.down('#iframe').el.dom;
+        iframeTag.src = "/landscape";
+        iframeTag.style.opacity = 1;
+
+        if (activeBackend.type === 'local') {
+            listenForFileChanges();
+        }
+    });
+
+    function listenForFileChanges() {
+        const fn = async function() {
+            if (!window.allFiles) {
+                return;
+            }
+            console.time('changes');
+            const changedFiles = await getChangedFiles(window.allFiles);
+            console.timeEnd('changes');
+            console.info(changedFiles);
+            if (changedFiles.length > 0) {
+                addMessage('Changes detected: uploading changes');
+                const files = await collectAllFiles();
+                window.allFiles = files;
+                await fetch('api/upload', {
+                    body: JSON.stringify({ socketId: socketId, files: Object.values(files)}),
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json' 
+                    }
+                });
+                addMessage('Changes uploaded');
+            }
+            setTimeout(fn, 1000);
+        };
+        if (!window.changesTimerSet) {
+            window.changesTimerSet = true;
+            fn();
+        }
+    }
+
+    return panel;
+}
+
 async function getMainPanel() {
     const landscapeYmlEditor = await getLandscapeYmlEditor();
+    const yarnFetchPanel = getYarnFetchPanel();
+    const previewPanel = getPreviewPanel();
 
 
     const mainPanel = new Ext.Panel({
@@ -964,12 +1181,17 @@ async function getMainPanel() {
             flex: 1,
             xtype: 'tabpanel',
             items: [{
-                ...landscapeYmlEditor,
-                title: 'Edit landscape.yml'
+                title: 'Edit landscape.yml',
+                layout: 'fit',
+                items: [ landscapeYmlEditor ]
             }, {
-                title: 'Fetch external data'
+                title: 'Fetch data',
+                layout: 'fit',
+                items: [ yarnFetchPanel ]
             }, {
-                title: 'Preview in real time'
+                title: 'Preview in real time',
+                layout: 'fit',
+                items: [ previewPanel]
             }]
         }]
     });
@@ -998,7 +1220,6 @@ async function openMainApp() {
 
 function init() {
     attachWebsocket();
-
     Ext.QuickTips.enable();
     const initialForm = getInitialForm();
     const mainContainer = new Ext.Viewport({
@@ -1015,190 +1236,6 @@ function init() {
     });
     window.mainContainer = mainContainer;
 
-    return;
-
-
-
-    const tmpDiv = document.createElement('div');
-    document.body.appendChild(tmpDiv);
-    tmpDiv.outerHTML = `
-        <div id="main" style="height: 100%;">
-            <div style="height: 40px; background: #ddd;">
-                <span style="font-size: 24px;"><b>yarn fecth demo</b></span>
-                <input id="dir" type="button" value="1a. Select folder with a landscape"></input>
-                <span>or</span>
-                <input id="github" type="button" value="1b. Select a github repository"></input>
-                <input id="run" type="button" value="2. Run yarn fetch"></input>
-                <input id="server" type="button" value="3. Run yarn dev"></input>
-                <input id="landscapeyml" type="button" value="Edit landscape.yml"></input>
-                <span id="overlay-wrapper"><input id="overlay" type="checkbox" checked></input><label for="overlay">Show Overlay</label></span>
-                <a href="/landscape" target="_blank">View Landscape</a>
-                <div id="status" style="display: inline-block; font-weight: bold;"></div>
-            </div>
-            <div style="height: calc(100% - 60px); position: relative;">
-                <div class="output" id="output-fetch" style="position: absolute; z-index: 100; width: 30%; height: 60%; left: 0; top: 10%">
-                  <div class="switch">+</div>
-                  <div><b>yarn fetch</b> output</div>
-                </div>
-                <div class="output" id="output-dev" style="position: absolute; z-index: 100; width: 30%; height: 60%; left: 70%; top: 10%;">
-                  <div class="switch">+</div>
-                  <div><b>yarn dev</b> output</div>
-                </div>
-                <iframe id="iframe" style="border: 0; position: absolute; z-index: 1; width: 100%; height: 100%; left: 0; top: 0;"></iframe>
-            </div>
-        </div>
-    `;
-    const mainDiv = document.querySelector('#main');
-
-    function disableButtons() {
-        dirButton.disabled = true;
-        inputButton.disabled = true;
-        serverButton.disabled = true;
-    }
-    function enableButtons() {
-        dirButton.disabled = false;
-        inputButton.disabled = false;
-        serverButton.disabled = false;
-    };
-
-
-    const inputButton = mainDiv.querySelector('#run');
-    const serverButton = mainDiv.querySelector('#server');
-    const landscapeYmlButton = mainDiv.querySelector('#landscapeyml');
-    const dirButton = mainDiv.querySelector('#dir');
-    const githubButton = mainDiv.querySelector('#github');
-
-    const outputFetchDiv = mainDiv.querySelector('#output-fetch');
-    const outputDevDiv = mainDiv.querySelector('#output-dev');
-    const statusDiv = mainDiv.querySelector('#status');
-    const landscapeLink = mainDiv.querySelector('a');
-    const iframeTag = mainDiv.querySelector('iframe');
-    const overlayWrapper = mainDiv.querySelector('#overlay-wrapper');
-
-    overlayWrapper.style.display = "none";
-    inputButton.disabled = true;
-    serverButton.disabled = true;
-    landscapeLink.style.visibility = "hidden";
-    iframeTag.style.opacity = 0;
-
-
-
-
-
-    inputButton.addEventListener('click', async function() {
-        disableButtons();
-        statusDiv.innerText = `Collecting local files`;
-        const files = await collectAllFiles();
-        window.allFiles = files;
-        statusDiv.innerText = `Uploading local files`;
-        await fetch('api/fetch', {
-            body: JSON.stringify({ socketId: socketId, files: Object.values(files)}),
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json' 
-            }
-        });
-        statusDiv.innerText = `Waiting for response from the server`;
-        // overlayWrapper.querySelector('input').checked = true;
-        // updateOverlayVisibility();
-        outputFetchDiv.classList.remove('collapsed');
-    });
-
-    function listenForFileChanges() {
-        const fn = async function() {
-            if (!window.allFiles) {
-                return;
-            }
-            console.time('changes');
-            const changedFiles = await getChangedFiles(window.allFiles);
-            console.timeEnd('changes');
-            console.info(changedFiles);
-            if (changedFiles.length > 0) {
-                statusDiv.innerText = `Uploading local file changes`;
-                const files = await collectAllFiles();
-                window.allFiles = files;
-                await fetch('api/upload', {
-                    body: JSON.stringify({ socketId: socketId, files: Object.values(files)}),
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json' 
-                    }
-                });
-                statusDiv.innerText = `Changes uploaded`;
-            }
-            setTimeout(fn, 1000);
-        };
-        if (!window.changesTimerSet) {
-            window.changesTimerSet = true;
-            fn();
-        }
-    }
-
-    serverButton.addEventListener('click', async function() {
-        disableButtons();
-        statusDiv.innerText = `Collecting local files`;
-        const files = await collectAllFiles();
-        window.allFiles = files;
-        statusDiv.innerText = `Uploading local files and starting a dev server`;
-        await fetch('api/server', {
-            body: JSON.stringify({ socketId: socketId, files: Object.values(files) }),
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json' 
-            }
-        });
-        statusDiv.innerText = `Dev server started`;
-        enableButtons();
-        landscapeLink.style.visibility = "";
-        listenForFileChanges();
-        serverButton.style.visibility = "hidden";
-        iframeTag.src = "/landscape";
-        iframeTag.style.opacity = 1;
-        overlayWrapper.style.display = "";
-        // outputFetchDiv.classList.add('overlay');
-        // outputDevDiv.classList.add('overlay');
-        outputDevDiv.classList.remove('collapsed');
-    });
-
-    landscapeYmlButton.addEventListener('click', async function() {
-        const landscapeYmlContent = await activeBackend.readFile({name: 'landscape.yml'});
-        const content = jsyaml.load(landscapeYmlContent);
-        console.info(content);
-
-        editLandscapeYml(content);
-
-    });
-
-    function updateOverlayVisibility() {
-        const isChecked = overlayWrapper.querySelector('input').checked;
-        outputFetchDiv.style.visibility = isChecked ? "" : "hidden";
-        outputDevDiv.style.visibility = isChecked ? "" : "hidden";
-    }
-
-    overlayWrapper.querySelector('input').addEventListener('click', updateOverlayVisibility);
-    overlayWrapper.querySelector('input').addEventListener('change', updateOverlayVisibility);
-
-    dirButton.addEventListener('click', async function() {
-        window.webFolder = await window.showDirectoryPicker();
-        const permission = await webFolder.requestPermission({mode: 'readwrite'});
-        if (permission !== 'granted') {
-            console.info('Permission to the folder was not provided');
-        }
-        window.activeBackend = localBackend;
-        enableButtons();
-    });
-
-    githubButton.addEventListener('click', showGithubSelector);
-
-    outputDevDiv.querySelector('.switch').addEventListener('click', function() {
-        outputDevDiv.classList.toggle('collapsed');
-    });
-    outputFetchDiv.querySelector('.switch').addEventListener('click', function() {
-        outputFetchDiv.classList.toggle('collapsed');
-    });
 }
 
 window.getChangedFiles = getChangedFiles;
