@@ -154,6 +154,29 @@ function getGithubSelector() {
         return new Date().toISOString().substring(0, 16).replace(':','-');
     }
 
+    const landscapes = `
+        cncf/landscape
+        AcademySoftwareFoundation/aswf-landscape
+        cdfoundation/cdf-landscape
+        finos/FINOS-landscape
+        hyperledger-landscape/hl-landscape
+        graphql/graphql-landscape
+        jmertic/lf-landscape
+        lfai/landscape
+        State-of-the-Edge/lfedge-landscape
+        lf-energy/lfenergy-landscape
+        lfph/lfph-landscape
+        openmainframeproject/omp-landscape
+        ossf/ossf-landscape
+        todogroup/ospolandscape
+        prestodb/presto-landscape
+        TarsCloud/TARS_landscape
+        ucfoundation/ucf-landscape
+    `.split('\n').map( (x) => x.trim()).filter( (x) => !!x);
+
+
+    const defaultRepo = window.localStorage.getItem('repo') || 'cncf/landscape';
+
 
     const form = new Ext.Container({
         layout: 'form',
@@ -166,10 +189,10 @@ function getGithubSelector() {
             width: 120,
             store: new Ext.data.JsonStore({
                 fields: ['id', 'name'],
-                data: ['cncf/landscape'].map( (x) => ({id: x, name: x}))
+                data: landscapes.map( (x) => ({id: x, name: x}))
             }),
             editable: false,
-            value: 'cncf/landscape',
+            value: defaultRepo,
             queryMode: 'local',
             selectOnFocus: false,
             triggerAction: 'all',
@@ -179,7 +202,7 @@ function getGithubSelector() {
             xtype: 'textfield',
             name: 'branch',
             fieldLabel: 'Branch',
-            value: window.localStorage.getItem('branch') || generateBranchName()
+            value: window.localStorage.getItem(`branch-${defaultRepo}`) || generateBranchName()
         }, {
             name: 'change',
             xtype: 'button',
@@ -198,20 +221,31 @@ function getGithubSelector() {
 
     form.down('[name=change]').on('click', function() {
         form.down('[name=branch]').setValue(generateBranchName());
-        window.localStorage.setItem('branch', form.down('[name=branch]').getValue());
+        const repo = from.down('[name=repo]').getValue();
+        window.localStorage.setItem(`branch-${repo}`, form.down('[name=branch]').getValue());
+
+    });
+
+    form.down('[name=repo]').on('change', function() {
+        const repo = form.down('[name=repo]').getValue();
+        window.localStorage.setItem('repo', repo);
+
+        form.down('[name=branch]').setValue(window.localStorage.getItem(`branch-${repo}`) || generateBranchName())
+
     });
 
     form.down('[name=branch]').on('change', function() {
-        window.localStorage.setItem('branch', form.down('[name=branch]').getValue());
+        const repo = form.down('[name=repo]').getValue();
+        window.localStorage.setItem(`branch-${repo}`, form.down('[name=branch]').getValue());
     });
 
     form.down('[name=connect]').on('click', async function() {
         const repo = form.down('[name=repo]').getValue();
         const branch = form.down('[name=branch]').getValue();
-        window.localStorage.setItem('branch', branch);
+        window.localStorage.setItem('repo', repo);
+        window.localStorage.setItem(`branch-${repo}`, branch);
 
         form.fireEvent('connect');
-
     });
     return form;
 }
