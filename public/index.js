@@ -605,6 +605,7 @@ async function getLandscapeYmlEditor() {
         assign('enduser');
         assign('organization');
         assign('joined');
+        assign('extra');
         if (editor.focusedElement) {
             editor.focusedElement.focus();
         }
@@ -614,12 +615,22 @@ async function getLandscapeYmlEditor() {
         // update img
     }
 
+    const descriptionPanel = new Ext.Panel({
+        region: 'south',
+        text: 'Selected Field Information',
+        width: '100%',
+        height: 100,
+        layout: 'fit',
+        items: [{ xtype: 'box' }]
+    });
+
     const editor = new Ext.Panel({
         title: 'Edit selected item',
         layout: 'form',
         bodyPadding: 10,
         width: 500,
-        region: 'east',
+        flex: 1,
+        region: 'center',
         bodyStyle: {
             overflowY: 'auto'
         },
@@ -784,22 +795,52 @@ async function getLandscapeYmlEditor() {
                 name: 'joined',
                 fieldLabel: 'joined'
             }, {
-                xtype: 'panel',
-                text: 'Selected Field Information',
-                width: '100%',
+                xtype: 'box',
+                html: `<div><label class="x-form-item-label x-form-item-label-left">Extra:</label></div>`
+            }, {
+                xtype: 'textarea',
+                name: 'extra',
                 height: 100,
-                layout: 'fit',
-                items: [{ xtype: 'box' }]
+                description: `
+                   extra fields can be added, please use this format:
+                     <pre>
+                       my_field_name: asdf
+                       my_other_field: test-it-now
+                     </pre>
+                   each non empty line is expected to be split by first :
+                `,
+                setValue: function(v) {
+                    if (!v || v.length === 0) {
+                        Ext.form.field.TextArea.prototype.setValue.call(this, '')
+                    } else {
+                        const lines = Object.keys(v).map(function(key) {
+                            const value = v[key];
+                            return `${key}: ${value}`;
+                        }).join('\n');
+                        Ext.form.field.TextArea.prototype.setValue.call(this, lines);
+                    }
+                },
+                getValue: function() {
+                    const v = Ext.form.field.TextArea.prototype.getValue.call(this);
+                    const result = {};
+                    const lines = v.split('\n').filter( (x) => x.trim());
+                    for (let line of lines) {
+                        const colonIndex = line.indexOf(':');
+                        const key = line.substring(0, colonIndex);
+                        const value =  line.substring(colonIndex + 1).trim();
+                        result[key] = value;
+                    }
+                    return lines.length > 0 ? result : ''
+                }
             }]
     });
 
     editor.on('afterrender', function() {
         const fields = editor.query('[name]');
-        const panel = editor.down('[xtype=panel]');
         for (var item of fields) {
             const updateDescription = function(item) {
-                panel.setTitle('Info: ' + item.name);
-                panel.down('[xtype=box]').update(item.description || 'No description')
+                descriptionPanel.setTitle('Info: ' + item.name);
+                descriptionPanel.down('[xtype=box]').update(item.description || 'No description')
             }
             item.on('focus', updateDescription);
             item.on('focus', (cmp) => editor.focusedElement = cmp );
@@ -882,21 +923,22 @@ async function getLandscapeYmlEditor() {
     }
 
     const bottom = new Ext.Panel({
-        layout: 'absolute',
+        layout: {type: 'hbox', align: 'center'},
         height: 50,
         region: 'south',
         items: [{
+            margins: 10,
             xtype: 'button',
             scale: 'medium',
             text: 'Save landscape.yml',
-            x: 5,
-            y: 5,
             handler: saveChanges
         }, {
+            xtype: 'box',
+            flex: 1
+        }, {
+            margins: 10,
             xtype: 'button',
-            text: 'Cancel',
-            x: 1005,
-            y: 5,
+            text: 'Reload',
             handler: function() {
                 //wnd.close();
             }
@@ -906,7 +948,18 @@ async function getLandscapeYmlEditor() {
     const mainContainer = new Ext.Container({
         layout: 'border',
         title: 'Edit landscape.yml',
-        items: [grid, editor, bottom],
+        items: [grid, {
+            region: 'east',
+            xtype: 'panel',
+            width: 500,
+            layout: {
+                type: 'vbox',
+                align: 'stretch'
+            },
+            items: [editor, descriptionPanel]
+                // editor,
+                // descriptionPanel]
+        }, bottom],
         width: 1124,
         height: 818
     });
@@ -962,6 +1015,7 @@ async function getLandscapeYmlEditor() {
             assign('unnamed_organization');
             assign('organization');
             assign('joined');
+            assign('extra');
             updateLogo();
         }
     }
