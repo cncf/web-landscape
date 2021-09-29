@@ -640,7 +640,8 @@ async function getLandscapeYmlEditor() {
             overflowY: 'auto'
         },
         defaults: {
-            width: 190
+            width: 190,
+            margins: '10 0'
         },
         items: [
             {
@@ -726,35 +727,122 @@ async function getLandscapeYmlEditor() {
                 fieldLabel: 'Homepage url:',
                 description: 'A full link to the homepage'
             }, {
+                xtype: 'container',
+                layout: 'absolute',
+                height: 15,
+                items: [{
+                    x: 110,
+                    y: 4,
+                    xtype: 'box',
+                    cls: 'x-form-item-label',
+                    html: `<i>https://twitter.com/</i>`
+                }]
+            }, {
                 xtype: 'textfield',
                 name: 'twitter',
                 fieldLabel: 'Twitter',
-                description: 'Link to a working twitter. Should contain at least one tweet'
+                description: 'Link to a working twitter. Should contain at least one tweet',
+                setValue: function(v) {
+                    const newValue = v ? v.replace('https://twitter.com/', '') : '';
+                    Ext.form.field.Text.prototype.setValue.call(this, newValue);
+                },
+                getValue: function() {
+                    const originalValue = Ext.form.field.Text.prototype.getValue.call(this).replace('https://twitter.com/', '');
+                    return originalValue ?  `https://twitter.com/${originalValue}` : '' ;
+                },
+            }, {
+                xtype: 'container',
+                layout: 'absolute',
+                height: 20,
+                items: [{
+                    x: 110,
+                    y: 9,
+                    xtype: 'box',
+                    cls: 'x-form-item-label',
+                    html: `<i>https://www.crunchbase.com/organization/</i>`
+                }]
             }, {
                 xtype: 'textfield',
                 name: 'crunchbase',
                 fieldLabel: 'Crunchbase',
+                setValue: function(v) {
+                    const newValue = v ? v.replace('https://www.crunchbase.com/organization/', '') : '';
+                    Ext.form.field.Text.prototype.setValue.call(this, newValue);
+                },
+                getValue: function() {
+                    const originalValue = Ext.form.field.Text.prototype.getValue.call(this).replace('https://www.crunchbase.com/organization/', '');
+                    return originalValue ?  `https://www.crunchbase.com/organization/${originalValue}` : '' ;
+                },
                 description: 'A full url to the crunchbase entry. Allows to fetch additional information about the organization responsible for the entry'
+            }, {
+                xtype: 'container',
+                layout: 'absolute',
+                height: 20,
+                items: [{
+                    x: 110,
+                    y: 9,
+                    xtype: 'box',
+                    cls: 'x-form-item-label',
+                    html: `<i>https://github.com/</i>`
+                }]
             }, {
                 xtype: 'textfield',
                 name: 'repo_url',
                 fieldLabel: 'Github repo url',
-                description: 'A full url to the github repository'
+                description: 'Github repo name, for example, <b>rails/rails</b> to read data from <b>https://github.com/rails/rails</b>',
+                setValue: function(v) {
+                    const newValue = v ? v.replace('https://github.com/', '') : '';
+                    Ext.form.field.Text.prototype.setValue.call(this, newValue);
+                },
+                getValue: function() {
+                    const originalValue = Ext.form.field.Text.prototype.getValue.call(this).replace('https://github.com/', '');
+                    return originalValue ?  `https://github.com/${originalValue}` : '' ;
+                }
+            }, {
+                xtype: 'container',
+                layout: 'absolute',
+                height: 20,
+                items: [{
+                    x: 110,
+                    y: 9,
+                    xtype: 'box',
+                    cls: 'x-form-item-label',
+                    html: `<i>https://github.com/</i>`
+                }]
             }, {
                 xtype: 'textfield',
                 name: 'project_org',
                 fieldLabel: 'project_org',
-                description: 'When a project belongs to multiple repositories, please provide this field'
+                description: 'Instead of repo_url, just provide a github organization, for example <b>cncf</b> to read data from <b>https://github.com/cncf</b>',
+                setValue: function(v) {
+                    const newValue = v ? v.replace('https://github.com/', '') : '';
+                    Ext.form.field.Text.prototype.setValue.call(this, newValue);
+                },
+                getValue: function() {
+                    const originalValue = Ext.form.field.Text.prototype.getValue.call(this).replace('https://github.com/', '');
+                    return originalValue ?  `https://github.com/${originalValue}` : '' ;
+                }
+            }, {
+                xtype: 'container',
+                layout: 'absolute',
+                height: 20,
+                items: [{
+                    x: 110,
+                    y: 9,
+                    xtype: 'box',
+                    cls: 'x-form-item-label',
+                    html: `<i>https://github.com/</i>`
+                }]
             }, {
                 xtype: 'textfield',
                 name: 'additional_repos',
                 fieldLabel: 'Additional repos',
-                description: 'Extra repositories to calculate stars and other statistic, for example <b>cncf/landscape, cncf/logos</b>'
+                description: 'Extra repositories split with comma to calculate stars and other statistic, for example <b>cncf/landscape, cncf/logos</b>'
             }, {
                 xtype: 'textfield',
                 name: 'stock_ticker',
                 fieldLabel: 'Stock ticker',
-                description: 'Allows to overrid a stock ticker when a stock ticker from a crunchbase is not correct'
+                description: 'Allows to override a stock ticker when a stock ticker from a crunchbase is not correct'
             }, {
                 xtype: 'textarea',
                 name: 'description',
