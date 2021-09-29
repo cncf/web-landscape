@@ -325,7 +325,7 @@ function getInitialForm() {
                             The most interesting feature is an ability to preview the results in real time.
                             </p>
 
-                            <h1>Please chose how do you want to connect to an interactive landscape</h1>
+                            <h1>Please choose how do you want to connect to an interactive landscape</h1>
                         `);
                 }
             }
@@ -620,6 +620,7 @@ async function getLandscapeYmlEditor() {
     }
 
     const descriptionPanel = new Ext.Panel({
+        bodyPadding: 10,
         region: 'south',
         text: 'Selected Field Information',
         width: '100%',
@@ -748,7 +749,7 @@ async function getLandscapeYmlEditor() {
                 xtype: 'textfield',
                 name: 'additional_repos',
                 fieldLabel: 'Additional repos',
-                description: 'Extra repositories to calculate stars and other statistic'
+                description: 'Extra repositories to calculate stars and other statistic, for example <b>cncf/landscape, cncf/logos</b>'
             }, {
                 xtype: 'textfield',
                 name: 'stock_ticker',
@@ -797,7 +798,8 @@ async function getLandscapeYmlEditor() {
             }, {
                 xtype: 'textfield',
                 name: 'joined',
-                fieldLabel: 'joined'
+                fieldLabel: 'joined',
+                description: `Provide a date in yyyy-mm-dd format when this organization joined the CNCF`
             }, {
                 xtype: 'box',
                 html: `<div><label class="x-form-item-label x-form-item-label-left">Extra:</label></div>`
@@ -806,12 +808,9 @@ async function getLandscapeYmlEditor() {
                 name: 'extra',
                 height: 100,
                 description: `
-                   extra fields can be added, please use this format:
-                     <pre>
+                   extra fields can be added, please use this format: <pre>
                        my_field_name: asdf
-                       my_other_field: test-it-now
-                     </pre>
-                   each non empty line is expected to be split by first :
+                       my_other_field: test-it-now </pre> each non empty line is expected to be split by first <b>:</b>
                 `,
                 setValue: function(v) {
                     if (!v || v.length === 0) {
