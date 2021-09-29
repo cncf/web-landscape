@@ -561,6 +561,20 @@ async function getLandscapeYmlEditor() {
         }]
     });
 
+    const updateLogo = async function() {
+        const img = editor.down(`[name=logo]`).getValue();
+        if (img && img !== editor.previousImg) {
+            editor.previousImg = img;
+            const imgEl = editor.down('[isImage]').el.dom;
+            // imgEl.src = "data:image/svg+xml;base64," + btoa('<svg></svg>');
+            try {
+                const svg = await activeBackend.readFile({dir: 'hosted_logos', name: img});
+                imgEl.src= "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
+            } catch(ex) {
+                imgEl.src = "";
+            }
+        }
+    }
     const onUpdateEntry = async function() {
         const item = sm.getSelection()[0];
         if (!item) {
@@ -595,18 +609,9 @@ async function getLandscapeYmlEditor() {
             editor.focusedElement.focus();
         }
 
+        updateLogo();
+
         // update img
-        const img = editor.down(`[name=logo]`).getValue();
-        if (img && img !== editor.previousImg) {
-            editor.previousImg = img;
-            const imgEl = editor.down('[isImage]').el.dom;
-            try {
-                const svg = await activeBackend.readFile({dir: 'hosted_logos', name: img});
-                imgEl.src= "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
-            } catch(ex) {
-                imgEl.src = "";
-            }
-        }
     }
 
     const editor = new Ext.Panel({
@@ -957,6 +962,7 @@ async function getLandscapeYmlEditor() {
             assign('unnamed_organization');
             assign('organization');
             assign('joined');
+            updateLogo();
         }
     }
 
