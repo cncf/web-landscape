@@ -585,7 +585,10 @@ async function getLandscapeYmlEditor() {
             if (value === "null") {
                 value = null;
             }
+            const oldFocusRow = grid.view.focusRow;
+            grid.view.focusRow = () => {};
             item.set(name, value);
+            grid.view.focusRow = oldFocusRow;
         }
         assign('category');
         assign('subcategory');
@@ -606,9 +609,10 @@ async function getLandscapeYmlEditor() {
         assign('organization');
         assign('joined');
         assign('extra');
-        if (editor.focusedElement) {
-            editor.focusedElement.focus();
-        }
+
+        // if (editor.focusedElement) {
+            // editor.focusedElement.focus();
+        // }
 
         updateLogo();
 
