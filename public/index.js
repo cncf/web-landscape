@@ -542,18 +542,22 @@ async function getLandscapeYmlEditor() {
             }
         }],
         columns: [{
+            sortable: false,
             text: 'Category',
             dataIndex: 'category',
             width: 150
         }, {
+            sortable: false,
             text: 'Subcategory',
             dataIndex: 'subcategory',
             width: 150
         }, {
+            sortable: false,
             text: 'Name',
             dataIndex: 'name',
             width: 150
         }, {
+            sortable: false,
             text: 'Crunchbase',
             dataIndex: 'crunchbase',
             renderer: (x) => x.replace('https://www.crunchbase.com/organization/', ''),
@@ -606,6 +610,9 @@ async function getLandscapeYmlEditor() {
         assign('project');
         assign('url_for_bestpractices');
         assign('enduser');
+        assign('open_source');
+        assign('allow_duplicate_repo');
+        assign('unnamed_organization');
         assign('organization');
         assign('joined');
         assign('extra');
@@ -615,6 +622,7 @@ async function getLandscapeYmlEditor() {
         // }
 
         updateLogo();
+        editor.doLayout();
 
         // update img
     }
@@ -743,12 +751,12 @@ async function getLandscapeYmlEditor() {
                 fieldLabel: 'Twitter',
                 description: 'Link to a working twitter. Should contain at least one tweet',
                 setValue: function(v) {
-                    const newValue = v ? v.replace('https://twitter.com/', '') : '';
+                    const newValue = v === 'null' ? 'null' : v ? v.replace('https://twitter.com/', '') : '';
                     Ext.form.field.Text.prototype.setValue.call(this, newValue);
                 },
                 getValue: function() {
                     const originalValue = Ext.form.field.Text.prototype.getValue.call(this).replace('https://twitter.com/', '');
-                    return originalValue ?  `https://twitter.com/${originalValue}` : '' ;
+                    return originalValue === 'null' ? 'null' : originalValue  ?  `https://twitter.com/${originalValue}` : '' ;
                 },
             }, {
                 xtype: 'container',
@@ -831,13 +839,27 @@ async function getLandscapeYmlEditor() {
                     y: 9,
                     xtype: 'box',
                     cls: 'x-form-item-label',
-                    html: `<i>https://github.com/</i>`
+                    width: 350,
+                    html: `One item per line. <i>https://github.com/</i> is added to each line`
                 }]
             }, {
-                xtype: 'textfield',
+                xtype: 'textarea',
+                grow: true,
                 name: 'additional_repos',
                 fieldLabel: 'Additional repos',
-                description: 'Extra repositories split with comma to calculate stars and other statistic, for example <b>cncf/landscape, cncf/logos</b>'
+                description: `Extra repositories, one item per line, to calculate stars and other statistic, for example <pre>
+                    cncf/landscape
+                    cncf/logos</pre>`,
+                setValue: function(v) {
+                    const newValue = v && v.length ? v.map( (x) => x.repo_url.replace('https://github.com/', '')).join('\n') : '';
+                    Ext.form.field.TextArea.prototype.setValue.call(this, newValue);
+                },
+                getValue: function() {
+                    const originalValue = Ext.form.field.TextArea.prototype.getValue.call(this);
+                    const repos = originalValue.split('\n').filter( (x) => x.trim()).map( (x) => x.trim()).filter( (x) => !!x).map( (x) => x.replace('https://github.com/', ''));
+                    const result = repos.map( (repo) => ({repo_url: `https://github.com/${repo}`}));
+                    return result.length > 0 ? result : '';
+                }
             }, {
                 xtype: 'textfield',
                 name: 'stock_ticker',
@@ -845,6 +867,7 @@ async function getLandscapeYmlEditor() {
                 description: 'Allows to override a stock ticker when a stock ticker from a crunchbase is not correct'
             }, {
                 xtype: 'textarea',
+                grow: true,
                 name: 'description',
                 fieldLabel: 'Description',
                 description: 'Provide a description to the filed here, if the one from the crunchbase is not good enough'
@@ -861,40 +884,112 @@ async function getLandscapeYmlEditor() {
             }, {
                 xtype: 'textfield',
                 name: 'url_for_bestpractices',
-                fieldLabel: 'url_for_bestpractices',
-                description: 'When a project follows best practices, please provide an url here.'
+                fieldLabel: 'Best practices',
+                description: 'When a project follows best practices at https://bestpractices.coreinfrastructure.org/en/projects, please provide a project github url here.'
             }, {
-                xtype: 'textfield',
+                xtype: 'combo',
                 name:  'enduser',
-                fieldLabel: 'enduser'
+                fieldLabel: 'enduser',
+                description: `CNCF specific field. Allows to mark a certain entry as an end user`,
+                displayField: 'name',
+                valueField: 'id',
+                width: 120,
+                store: new Ext.data.JsonStore({
+                    fields: ['id', 'name'],
+                    data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
+                }),
+                editable: false,
+                value: '',
+                queryMode: 'local',
+                selectOnFocus: false,
+                triggerAction: 'all',
+                autoSelect: true,
+                forceSelection: true
             }, {
-                xtype: 'checkbox',
+                xtype: 'combo',
                 name: 'open_source',
-                boxLabel: 'open_source'
+                fieldLabel: 'open_source',
+                description: `Sometimes a certain item is not considered opensource although it has a github repo. Choose <b>false</b> in this case. <b>Not set</b> means that a product is considered open source if it has a repo_url field set`,
+                displayField: 'name',
+                valueField: 'id',
+                width: 120,
+                store: new Ext.data.JsonStore({
+                    fields: ['id', 'name'],
+                    data: [{id: '', name: 'Not set'}, {id: false, name: 'false' }]
+                }),
+                editable: false,
+                value: '',
+                queryMode: 'local',
+                selectOnFocus: false,
+                triggerAction: 'all',
+                autoSelect: true,
+                forceSelection: true
             }, {
-                xtype: 'checkbox',
+                xtype: 'combo',
                 name: 'allow_duplicate_repo',
-                boxLabel: 'allow_duplicate_repo'
+                fieldLabel: 'allow_duplicate_repo',
+                description: `Usually two different items can not have the same repo_url. Rarely different items refer to the same github repo, in this case both should be marked as <b>true</b>`,
+                displayField: 'name',
+                valueField: 'id',
+                width: 120,
+                store: new Ext.data.JsonStore({
+                    fields: ['id', 'name'],
+                    data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
+                }),
+                editable: false,
+                value: '',
+                queryMode: 'local',
+                selectOnFocus: false,
+                triggerAction: 'all',
+                autoSelect: true,
+                forceSelection: true
             }, {
-                xtype: 'checkbox',
+                xtype: 'combo',
                 name: 'unnamed_organization',
-                boxLabel: 'unnamed_organization'
+                fieldLabel: 'unnamed_organization',
+                description: 'CNCF specific field to show a lack of organization. Choose <b>true</b> only in that case',
+                cncfOnly: true,
+                displayField: 'name',
+                valueField: 'id',
+                width: 120,
+                store: new Ext.data.JsonStore({
+                    fields: ['id', 'name'],
+                    data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
+                }),
+                editable: false,
+                value: '',
+                queryMode: 'local',
+                selectOnFocus: false,
+                triggerAction: 'all',
+                autoSelect: true,
+                forceSelection: true
             }, {
                 xtype: 'textfield',
                 name: 'organization',
-                fieldLabel: 'organization'
+                fieldLabel: 'organization',
+                description: `If crunchbase is not provided, then this field is used to specify an organization name.`,
+                setValue: function(v) {
+                    this.assignedValue = v;
+                    const newValue = v ? v.name : '';
+                    Ext.form.field.Text.prototype.setValue.call(this, newValue);
+                },
+                getValue: function() {
+                    const originalValue = Ext.form.field.Text.prototype.getValue.call(this);
+                    return originalValue ? { ...this.assignedValue, name: originalValue } : '' ;
+                },
             }, {
                 xtype: 'textfield',
                 name: 'joined',
                 fieldLabel: 'joined',
+                cncfOnly: true,
                 description: `Provide a date in yyyy-mm-dd format when this organization joined the CNCF`
             }, {
                 xtype: 'box',
                 html: `<div><label class="x-form-item-label x-form-item-label-left">Extra:</label></div>`
             }, {
                 xtype: 'textarea',
+                grow: true,
                 name: 'extra',
-                height: 100,
                 description: `
                    extra fields can be added, please use this format: <pre>
                        my_field_name: asdf
@@ -1109,6 +1204,7 @@ async function getLandscapeYmlEditor() {
             assign('extra');
             updateLogo();
         }
+        editor.doLayout();
     }
 
     return mainContainer;
