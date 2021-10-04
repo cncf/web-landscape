@@ -64,6 +64,7 @@ function yaml2json(content) {
     var dump = jsyaml.dump(content, {lineWidth: 160});
     dump = dump.replace(/(- \w+:) null/g, '$1');
     dump = dump.replace(/(- \w+:) ''/g, '$1');
+    dump = dump.replace(/(  \w+:) originally-empty-null/g, '$1');
     dump = dump.split("\n").filter((x) => x.indexOf('!<tag:yaml.org,2002:js/undefined>') === -1).join("\n");
     return dump;
 }
@@ -471,14 +472,20 @@ async function getLandscapeYmlEditor() {
     const landscapeYmlContent = await activeBackend.readFile({name: 'landscape.yml'});
     const content = jsyaml.load(landscapeYmlContent);
     const items = [];
+    const matchItem = /\s{8}- item:/gim;
+    let prevMatch = matchItem.exec(landscapeYmlContent);
     for (var category of content.landscape) {
         for (var subcategory of category.subcategories) {
             for (var item of subcategory.items) {
+                const currentMatch = matchItem.exec(landscapeYmlContent) || { index: 100000000};
+                const originStr = landscapeYmlContent.substring(prevMatch.index, currentMatch.index);
+                prevMatch = currentMatch;
                 items.push({
                     category: category.name,
                     subcategory: subcategory.name,
                     id: `${category.name}:${subcategory.name}:${item.name}`,
                     original: item,
+                    source: originStr,
                     ...item
                 });
             }
@@ -508,7 +515,7 @@ async function getLandscapeYmlEditor() {
         'unnamed_organization'
     ];
 
-    const fields = ['category', 'subcategory', 'id', 'item', 'original', ...allowedKeys];
+    const fields = ['category', 'subcategory', 'id', 'item', 'original', 'source', ...allowedKeys];
 
     const store = new Ext.data.JsonStore({
         fields: fields
@@ -567,15 +574,19 @@ async function getLandscapeYmlEditor() {
 
     const updateLogo = async function() {
         const img = editor.down(`[name=logo]`).getValue();
-        if (img && img !== editor.previousImg) {
+        if (img !== editor.previousImg) {
             editor.previousImg = img;
             const imgEl = editor.down('[isImage]').el.dom;
             // imgEl.src = "data:image/svg+xml;base64," + btoa('<svg></svg>');
-            try {
-                const svg = await activeBackend.readFile({dir: 'hosted_logos', name: img});
-                imgEl.src= "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
-            } catch(ex) {
-                imgEl.src = "";
+            if (img) {
+                try {
+                    const svg = await activeBackend.readFile({dir: 'hosted_logos', name: img});
+                    imgEl.src= "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
+                } catch(ex) {
+                    imgEl.src = "";
+                }
+            } else {
+                imgEl.src = "data:image/svg+xml;base64," + btoa('<svg></svg>');
             }
         }
     }
@@ -1044,9 +1055,15 @@ async function getLandscapeYmlEditor() {
                 fileReader.onload = async function(event) {
                     const content = fileReader.result;
                     const fileName = editor.down(`[name=logo]`).getValue();
-                    await activeBackend.writeFile({dir: 'hosted_logos', name: fileName, content: content });
-                    editor.previousImg = -1; // to trigger the redraw
-                    dom.value = '';
+                    if (!fileName) {
+                        Ext.Msg.alert('Error', 'Please fill in the <b>Logo:</b> field first with a name of the file');
+                        editor.previousImg = -1; // to trigger the redraw
+                        dom.value = '';
+                    } else {
+                        await activeBackend.writeFile({dir: 'hosted_logos', name: fileName, content: content });
+                        editor.previousImg = -1; // to trigger the redraw
+                        dom.value = '';
+                    }
                 };
                 fileReader.readAsText(fileInfo);
             }
@@ -1086,11 +1103,15 @@ async function getLandscapeYmlEditor() {
             const item = record.get('original') || {
                 item: ''
             };
+            const source = record.get('source') || '';
 
             for (var key of allowedKeys) {
                 const value = record.get(key);
                 if (value !== '') {
                     item[key] = value;
+                    if (source.includes(`            ${key}:\n`) && value === null) {
+                        item[key] = 'originally-empty-null';
+                    }
                 } else {
                     delete item[key];
                 }
