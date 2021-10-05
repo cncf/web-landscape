@@ -469,6 +469,12 @@ function getInitialForm() {
 }
 
 async function getLandscapeYmlEditor() {
+    const settingsYmlContent = await activeBackend.readFile({name: 'settings.yml'});
+    const settingsContent = jsyaml.load(settingsYmlContent);
+    const projects = settingsContent.relation.values.filter( (x) => x.id === 'hosted')[0].children.map(
+        (x) => ({id: x.id, name: x.tag })
+    );
+
     const landscapeYmlContent = await activeBackend.readFile({name: 'landscape.yml'});
     const content = jsyaml.load(landscapeYmlContent);
     const items = [];
@@ -888,10 +894,24 @@ async function getLandscapeYmlEditor() {
                 fieldLabel: 'branch',
                 description: 'A branch on a github when a default one is not suitable'
             }, {
-                xtype: 'textfield',
+                xtype: 'combo',
                 name: 'project',
                 fieldLabel: 'project',
-                description: 'Which internal project this entry belongs to'
+                description: 'Which internal project this entry belongs to',
+                displayField: 'name',
+                valueField: 'id',
+                width: 120,
+                store: new Ext.data.JsonStore({
+                    fields: ['id', 'name'],
+                    data: [{id: '', name: '(no project)'}].concat(projects)
+                }),
+                editable: false,
+                value: '',
+                queryMode: 'local',
+                selectOnFocus: false,
+                triggerAction: 'all',
+                autoSelect: true,
+                forceSelection: true
             }, {
                 xtype: 'textfield',
                 name: 'url_for_bestpractices',
