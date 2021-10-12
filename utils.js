@@ -6,7 +6,7 @@ const childProcess = require('child_process');
 // in order to save space, hard links are created for node_modules(1.2Gb)
 async function cloneLandscapeApp({srcPath, appPath}) {
     await fs.mkdir(appPath, { recursive: true});
-    childProcess.execSync(`rm -rf ${appPath}`);
+    await fs.rm(appPath, { force: true, recursive: true});
     await fs.mkdir(appPath, { recursive: true});
 
     async function walk(dir, isRoot) {

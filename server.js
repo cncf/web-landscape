@@ -1,7 +1,9 @@
 const fs = require('fs/promises');
+const util = require('util');
 const path = require('path');
 const express = require('express');
 const childProcess = require('child_process');
+const exec = util.promisify(childProcess.exec);
 const WebSocket = require("ws");
 const httpProxy = require('http-proxy');
 const proxy = httpProxy.createProxyServer();
@@ -30,6 +32,53 @@ const httpsInfo = process.env.DOMAIN ? {
 
 require('fs').mkdirSync(tmpFolder, { recursive: true });
 
+const githubRepoLandscapes = `
+        cncf/landscape
+        AcademySoftwareFoundation/aswf-landscape
+        cdfoundation/cdf-landscape
+        finos/FINOS-landscape
+        hyperledger-landscape/hl-landscape
+        graphql/graphql-landscape
+        jmertic/lf-landscape
+        lfai/landscape
+        State-of-the-Edge/lfedge-landscape
+        lf-energy/lfenergy-landscape
+        lfph/lfph-landscape
+        openmainframeproject/omp-landscape
+        ossf/ossf-landscape
+        todogroup/ospolandscape
+        prestodb/presto-landscape
+        TarsCloud/TARS_landscape
+        ucfoundation/ucf-landscape
+    `.split('\n').map( (x) => x.trim()).filter( (x) => !!x);
+
+
+const isUpdatingLandscape = {};
+async function fetchGithubRepoLandscapes() {
+    await fs.mkdir('tmp-landscapes', { recursive: true});
+    for (const landscape of githubRepoLandscapes) {
+        if (!isUpdatingLandscape[landscape]) {
+            isUpdatingLandscape[landscape] = true;
+            const repoUrl = `https://github.com/${landscape}`;
+            const githubRepoPath = path.resolve('tmp-landscapes', landscape.split('/')[1]);
+            await fs.rm(githubRepoPath, { force: true, recursive: true });
+
+            const cmd = `git clone ${repoUrl} ${landscape.replace('/', '-')}`;
+            const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: 'tmp-landscapes', stdio: 'inherit' });
+
+            const p = new Promise(function(resolve) {
+                pid.on('close', () => resolve());
+            });
+            await p;
+            isUpdatingLandscape[landscape] = false;
+        }
+    }
+}
+fetchGithubRepoLandscapes();
+setInterval(fetchGithubRepoLandscapes, 4 * 3600 * 1000); //every 4 hour get a fresh repo
+
+
+
 async function cleanup() {
     const log = function(x) {
         console.info(`[Cleanup] ${x}`);
@@ -53,15 +102,15 @@ async function cleanup() {
         console.info({ folder, createdTime, serverInfo });
         if (!serverInfo && new Date().getTime() > createdTime + maxTimeoutInMinutes * 60 * 1000) {
             log(`Deleting a folder ${folder}`);
-            childProcess.exec(`rm -rf "${path.join(tmpFolder, folder)}"`);
+            exec(`rm -rf "${path.join(tmpFolder, folder)}"`);
         }
     }
 
-    const pids1 = childProcess.execSync('ps aux | grep "yarn-berry.js dev" | grep -v grep || echo').toString()
+    const pids1 = (await exec('ps aux | grep "yarn-berry.js dev" | grep -v grep || echo')).stdout
         .split('\n').filter( (x) => !!x).map( (x) => +x.split(' ').filter( (x) => !!x)[1]);
     const pids = pids1.length > 0
         ?  pids1
-        : childProcess.execSync('ps aux | grep "yarn dev" | grep -v grep || echo').toString()
+        : (await exec('ps aux | grep "yarn dev" | grep -v grep || echo')).stdout
         .split('\n').filter( (x) => !!x).map( (x) => +x.split(' ').filter( (x) => !!x)[1]);
 
     // detect not managed processes
@@ -123,6 +172,8 @@ app.post('/api/upload', async function(req, res) {
 
 app.post('/api/connect', async function(req, res) {
 
+    const repoFolder = req.body.repo.replace('/', '-');
+    const repoHost = `https://$GITHUB_USER:$GITHUB_TOKEN@github.com`;
     const repoUrl = `https://$GITHUB_USER:$GITHUB_TOKEN@github.com/${req.body.repo}`;
     const branch = `web-landscape-${req.body.branch}`;
 
@@ -134,24 +185,43 @@ app.post('/api/connect', async function(req, res) {
         return;
     }
 
-    const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
-    await fs.mkdir(tmpPath, { recursive: true});
+    const fn = async () => {
+        isUpdatingLandscape[req.body.repo] = true;
+        const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
+        await fs.mkdir(tmpPath, { recursive: true});
 
-    const cmd = `git clone ${repoUrl} . && (git checkout -t origin/${branch} || git checkout -b ${branch})`;
-    const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
+        const defaultBranch = (await exec(`cd tmp-landscapes/${repoFolder} && git rev-parse --abbrev-ref HEAD`)).stdout.trim();
 
-    pid.stdout.on('data', (data) => {
-        clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
-    });
+        clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: `default branch is ${defaultBranch}\n`}));
+        const cmd = ` git clone ../../../tmp-landscapes/${repoFolder} . && \
+                    git remote rm origin && \
+                    git remote add origin ${repoUrl} && \
+                    git fetch && \
+                    git reset --hard origin/${defaultBranch} && \
+                    (git checkout -t origin/${branch} || git checkout -b ${branch}) \
+                    `
+        const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
 
-    pid.stderr.on('data', (data) => {
-        clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
-    });
+        pid.stdout.on('data', (data) => {
+            clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
+        });
 
-    pid.on('close', async (code) => {
-        clientSocket.send(JSON.stringify({type: 'finish', target: 'connect', code }));
-        res.json({success: true, pid: pid.pid});
-    });
+        pid.stderr.on('data', (data) => {
+            clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
+        });
+
+        pid.on('close', async (code) => {
+            isUpdatingLandscape[req.body.repo] = false;
+            clientSocket.send(JSON.stringify({type: 'finish', target: 'connect', code }));
+            res.json({success: true, pid: pid.pid});
+        });
+    }
+
+    if (isUpdatingLandscape[req.body.repo]) {
+        setTimeout(fn, 100);
+    } else {
+        fn();
+    }
 
 });
 
