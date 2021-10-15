@@ -644,6 +644,18 @@ async function getLandscapeYmlEditor() {
         // update img
     }
 
+    // keep a current selection
+    const selectedItemId = window.localStorage.getItem('selected-' + window.activeBackend.getDescription());
+    const selectedItem = store.getRange().filter( (x) => x.data.id === selectedItemId)[0];
+    if (selectedItem) {
+        setTimeout( () => {
+            grid.getSelectionModel().select([selectedItem]);
+            grid.on('viewready', function() {
+                grid.getView().el.dom.querySelector('.x-grid-row-selected').scrollIntoView();
+            });
+        }, 100);
+    }
+
     const descriptionPanel = new Ext.Panel({
         bodyPadding: 10,
         region: 'south',
@@ -1193,6 +1205,10 @@ async function getLandscapeYmlEditor() {
 
     sm.on('selectionchange', function() {
         checkSelection();
+        const selectedItem = sm.getSelection()[0];
+        if (selectedItem) {
+            window.localStorage.setItem('selected-' + window.activeBackend.getDescription(), selectedItem.get('id'));
+        }
     });
     mainContainer.on('afterrender', () => checkSelection(), this, { delay: 1});
 
