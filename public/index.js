@@ -663,10 +663,12 @@ function getLandscapeYmlEditor() {
                     const categorySelector = mainContainer.down('[name=category]');
                     const subcategorySelector = mainContainer.down('[name=subcategory]');
                     if (categorySelector.getValue() === category) {
-                        updateSubcategoryList();
-                    }
-                    if (categorySelector.getValue() === category && subcategorySelector.getValue() === from) {
-                        subcategorySelector.setValue(to);
+                        if (subcategorySelector.getValue() === from) {
+                            updateSubcategoryList();
+                            subcategorySelector.setValue(to);
+                        } else {
+                            updateSubcategoryList();
+                        }
                     }
 
                     for (let record of store.getRange()) {
@@ -678,7 +680,53 @@ function getLandscapeYmlEditor() {
                 });
 
                 panel.on('category-added', ({category}) => {
+                    mainContainer.data.landscape.push({ name: category, subcategories: [] });
+                    const categorySelector = mainContainer.down('[name=category]');
+                    categorySelector.store.loadData(mainContainer.data.landscape.map( (x) => ({ id: x.name, name: x.name })));
+                });
 
+                panel.on('category-removed', ({category}) => {
+                    mainContainer.data.landscape = mainContainer.data.landscape.filter( (x) => x.name !== category);
+                    const categorySelector = mainContainer.down('[name=category]');
+                    categorySelector.store.loadData(mainContainer.data.landscape.map( (x) => ({ id: x.name, name: x.name })));
+                    if (categorySelector.getValue() === category) {
+                        categorySelector.setValue('');
+                        updateSubcategoryList();
+                    }
+                    for (let record of store.getRange()) {
+                        if (record.get('category') === category) {
+                            store.remove(record);
+                        }
+                    }
+                });
+
+                panel.on('subcategory-added', ({category, subcategory}) => {
+                    const categoryEntry = mainContainer.data.landscape.filter( (x) => x.name === category )[0];
+                    categoryEntry.subcategories.push({ name: subcategory, items: [] });
+                    const categorySelector = mainContainer.down('[name=category]');
+                    if (categorySelector.getValue() === category) {
+                        updateSubcategoryList();
+                    }
+                });
+
+                panel.on('subcategory-removed', ({category, subcategory}) => {
+                    const categoryEntry = mainContainer.data.landscape.filter( (x) => x.name === category )[0];
+                    categoryEntry.subcategories = categoryEntry.subcategories.filter( (x) => x.name !== subcategory)
+
+                    const categorySelector = mainContainer.down('[name=category]');
+                    const subcategorySelector = mainContainer.down('[name=subcategory]');
+
+                    if (categorySelector.getValue() === category) {
+                        updateSubcategoryList();
+                        if (subcategorySelector.getValue() === subcategory) {
+                            categorySelector.setValue('');
+                        }
+                    }
+                    for (let record of store.getRange()) {
+                        if (record.get('category') === category && record.get('subcategory') === subcategory) {
+                            store.remove(record);
+                        }
+                    }
                 });
 
                 wnd.show();
@@ -1325,6 +1373,10 @@ function getLandscapeYmlEditor() {
             list = categoryEntry.subcategories.map( (x) => ({ id: x.name, name: x.name }));
         }
         editor.down('[name=subcategory]').store.loadData(list);
+        const value = editor.down('[name=subcategory]').getValue();
+        if (!categoryEntry.subcategories.filter( (x) => x.name === value)[0]) {
+            editor.down('[name=subcategory]').setValue('');
+        }
     }
 
     function checkSelection() {
@@ -1400,11 +1452,29 @@ After adding a new category or subcategory - close this modal window and add at 
                 xtype: 'grid',
                 tbar: [{
                     xtype: 'button',
-                    text: 'Add'
+                    text: 'Add',
+                    handler: function() {
+                        Ext.Msg.prompt('Name', 'Category Name', function(button,  text) {
+                            if (text) {
+                                const newRecord = panel.down('#categories').store.add({ name: text, children: []})[0];
+                                panel.down('#categories').getSelectionModel().select(newRecord);
+                                handleSelectedCategory();
+                                panel.fireEvent('category-added', { category: text });
+                            }
+                        });
+                    }
                 }, '-', {
                     xtype: 'button',
-                    text: 'Delete'
-
+                    text: 'Delete',
+                    handler: function() {
+                        const record = panel.down('#categories').getSelectionModel().getSelection()[0];
+                        if (!record) {
+                            return;
+                        }
+                        panel.down('#categories').store.remove(record);
+                        handleSelectedCategory();
+                        panel.fireEvent('category-removed', { category: record.get('name') });
+                    }
                 }],
                 itemId: 'categories',
                 title: 'Categories',
@@ -1418,10 +1488,35 @@ After adding a new category or subcategory - close this modal window and add at 
                 xtype: 'grid',
                 tbar: [{
                     xtype: 'button',
-                    text: 'Add'
+                    text: 'Add',
+                    handler: function() {
+                        const categoryRecord = panel.down('#categories').getSelectionModel().getSelection()[0];
+                        if (!categoryRecord) {
+                            return;
+                        }
+                        Ext.Msg.prompt('Add to ' + categoryRecord.get('name'), 'Subcategory Name', function(button,  text) {
+                            if (text) {
+                                const newRecord = panel.down('#subcategories').store.add({ name: text, count: 0 })[0];
+                                panel.down('#subcategories').getSelectionModel().select(newRecord);
+                                panel.fireEvent('subcategory-added', { category: categoryRecord.get('name'), subcategory: text });
+                            }
+                        });
+                    }
                 }, '-', {
                     xtype: 'button',
-                    text: 'Delete'
+                    text: 'Delete',
+                    handler: function() {
+                        const categoryRecord = panel.down('#categories').getSelectionModel().getSelection()[0];
+                        if (!categoryRecord) {
+                            return;
+                        }
+                        const record = panel.down('#subcategories').getSelectionModel().getSelection()[0];
+                        if (!record) {
+                            return;
+                        }
+                        panel.down('#subcategories').store.remove(record);
+                        panel.fireEvent('subcategory-removed', { category: categoryRecord.get('name'), subcategory: record.get('name') });
+                    }
                 }],
                 itemId: 'subcategories',
                 title: 'Subcategories',
@@ -1468,19 +1563,23 @@ After adding a new category or subcategory - close this modal window and add at 
             }
         }
     });
+
+    const handleSelectedCategory = () => {
+        const gridCategories = panel.down('#categories');
+        const gridSubcategories = panel.down('#subcategories');
+        const selected = gridCategories.getSelectionModel().getSelection()[0];
+        if (!selected) {
+            gridSubcategories.store.loadData([]);
+        } else {
+            const children = selected.get('children');
+            gridSubcategories.store.loadData(children.map( (x) => ({ id: x.name, name: x.name, count: x.items.length })));
+        }
+    }
+
     panel.on('afterrender', function() {
       const gridCategories = this.down('#categories');
       const gridSubcategories = this.down('#subcategories');
 
-      const handleSelectedCategory = () => {
-          const selected = gridCategories.getSelectionModel().getSelection()[0];
-          if (!selected) {
-              gridSubcategories.store.loadData([]);
-          } else {
-              const children = selected.get('children');
-              gridSubcategories.store.loadData(children.map( (x) => ({ id: x.name, name: x.name, count: x.items.length })));
-          }
-      }
       gridCategories.getSelectionModel().on('selectionchange', handleSelectedCategory);
 
       gridCategories.store.on('update', (store, record) => {
