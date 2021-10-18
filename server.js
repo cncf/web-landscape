@@ -60,7 +60,7 @@ async function fetchGithubRepoLandscapes() {
         if (!isUpdatingLandscape[landscape]) {
             isUpdatingLandscape[landscape] = true;
             const repoUrl = `https://github.com/${landscape}`;
-            const githubRepoPath = path.resolve('tmp-landscapes', landscape.split('/')[1]);
+            const githubRepoPath = path.resolve('tmp-landscapes', landscape.replace('/' , '-'));
             await fs.rm(githubRepoPath, { force: true, recursive: true });
 
             const cmd = `git clone ${repoUrl} ${landscape.replace('/', '-')}`;

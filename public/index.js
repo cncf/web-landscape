@@ -207,7 +207,7 @@ function getGithubSelector() {
         }, {
             name: 'change',
             xtype: 'button',
-            width: 120,
+            width: 160,
             text: 'Change branch name'
         }, {
             xtype: 'box',
@@ -216,7 +216,9 @@ function getGithubSelector() {
             name: 'connect',
             xtype: 'button',
             scale: 'large',
-            text: 'CONNECT'
+            text: 'CONNECT',
+            width: 370,
+            height: 100
         }]
     })
 
@@ -344,6 +346,7 @@ function getInitialForm() {
                 itemId: 'githubPanel',
                 bodyPadding: 10,
                 xtype: 'panel',
+                frame: true,
                 title: 'Connect to the github',
                 layout: 'fit',
                 items: [githubSelector],
@@ -357,7 +360,9 @@ function getInitialForm() {
                 xtype: 'box',
                 autoEl: {
                     style: {
-                        fontSize: '48px'
+                        fontSize: '48px',
+                        left: '440px',
+                        top: '120px'
                     },
                     cn: 'OR'
                 }
@@ -369,6 +374,7 @@ function getInitialForm() {
                 width: 400,
                 height: 300,
                 title: 'Connect to a local folder',
+                frame: true,
                 layout: 'absolute',
                 items: [{
                     x: 50,
@@ -468,15 +474,38 @@ function getInitialForm() {
 
 }
 
-async function getLandscapeYmlEditor() {
+const allowedKeys = [
+    'name',
+    'description',
+    'homepage_url',
+    'project',
+    'repo_url',
+    'branch',
+    'project_org',
+    'url_for_bestpractices',
+    'additional_repos',
+    'stock_ticker',
+    'logo',
+    'enduser',
+    'open_source',
+    'twitter',
+    'crunchbase',
+    'allow_duplicate_repo',
+    'joined',
+    'extra',
+    'organization',
+    'unnamed_organization'
+];
+
+async function loadYmlFiles() {
     const settingsYmlContent = await activeBackend.readFile({name: 'settings.yml'});
     const settingsContent = jsyaml.load(settingsYmlContent);
     const projects = settingsContent.relation.values.filter( (x) => x.id === 'hosted')[0].children.map(
         (x) => ({id: x.id, name: x.tag })
     );
-
     const landscapeYmlContent = await activeBackend.readFile({name: 'landscape.yml'});
     const content = jsyaml.load(landscapeYmlContent);
+
     const items = [];
     const matchItem = /\s{8}- item:/gim;
     let prevMatch = matchItem.exec(landscapeYmlContent);
@@ -498,28 +527,69 @@ async function getLandscapeYmlEditor() {
         }
     }
 
-    const allowedKeys = [
-        'name',
-        'description',
-        'homepage_url',
-        'project',
-        'repo_url',
-        'branch',
-        'project_org',
-        'url_for_bestpractices',
-        'additional_repos',
-        'stock_ticker',
-        'logo',
-        'enduser',
-        'open_source',
-        'twitter',
-        'crunchbase',
-        'allow_duplicate_repo',
-        'joined',
-        'extra',
-        'organization',
-        'unnamed_organization'
-    ];
+    return {
+        projects,
+        items,
+        landscape: content.landscape
+    }
+
+}
+
+async function saveChanges(store) {
+    const rows = store.getRange();
+    const newContent = { landscape: [] };
+    const categories = {};
+    const subcategories = {};
+
+    for (var record of rows) {
+        const categoryKey = record.get('category');
+        if (!categories[categoryKey]) {
+            categories[categoryKey] = {
+                category: '',
+                name: categoryKey,
+                subcategories: []
+            }
+            newContent.landscape.push(categories[categoryKey]);
+        }
+        const subcategoryKey = `${record.get('category')}:${record.get('subcategory')}`;
+        if (!subcategories[subcategoryKey]) {
+            subcategories[subcategoryKey] = {
+                subcategory: '',
+                name: record.get('subcategory'),
+                items: []
+            }
+            categories[categoryKey].subcategories.push(subcategories[subcategoryKey]);
+        }
+
+        const item = record.get('original') || {
+            item: ''
+        };
+        const source = record.get('source') || '';
+
+        for (var key of allowedKeys) {
+            const value = record.get(key);
+            if (value !== '') {
+                item[key] = value;
+                if (source.includes(`            ${key}:\n`) && value === null) {
+                    item[key] = 'originally-empty-null';
+                }
+            } else {
+                delete item[key];
+            }
+        }
+
+        subcategories[subcategoryKey].items.push(item);
+
+    }
+
+    const yml = yaml2json(newContent);
+    Ext.Msg.wait('Saving landscape.yml');
+    await activeBackend.writeFile({name: 'landscape.yml', content: yml});
+    Ext.Msg.hide();
+}
+
+function getLandscapeYmlEditor() {
+
 
     const fields = ['category', 'subcategory', 'id', 'item', 'original', 'source', ...allowedKeys];
 
@@ -527,10 +597,10 @@ async function getLandscapeYmlEditor() {
         fields: fields
     });
 
-    store.loadData(items);
-
     const grid = new Ext.grid.Panel({
-        region: 'center',
+        flex: 1,
+        padding: 5,
+        frame: true,
         store: store,
         tbar: [{
             xtype: 'button',
@@ -552,6 +622,67 @@ async function getLandscapeYmlEditor() {
                 if (record) {
                     record.store.remove(record);
                 }
+            }
+        }, '-', {
+            xtype: 'button',
+            text: 'Categories / Subcategories editor',
+            handler: () => {
+                const panel = getCategoriesEditor();
+                const wnd = new Ext.Window({
+                    header: false,
+                    modal: true,
+                    minimizable: false,
+                    maximizable: false,
+                    resizable: false,
+                    width: 1050, 
+                    height: 600,
+                    layout: 'fit',
+                    items: [panel]
+                });
+
+                panel.on('category-renamed', ({from, to}) => {
+                    const category = mainContainer.data.landscape.filter( (x) => x.name === from )[0];
+                    const categorySelector = mainContainer.down('[name=category]');
+                    category.name = to;
+                    categorySelector.store.loadData(mainContainer.data.landscape.map( (x) => ({ id: x.name, name: x.name })));
+                    if (categorySelector.getValue() === from) {
+                        categorySelector.setValue(to);
+                    }
+                    for (let record of store.getRange()) {
+                        if (record.get('category') === from) {
+                            record.set('category', to);
+                            record.commit();
+                        }
+                    }
+                });
+
+                panel.on('subcategory-renamed', ({category, from, to}) => {
+                    const categoryEntry = mainContainer.data.landscape.filter( (x) => x.name === category )[0];
+                    const subcategory = categoryEntry.subcategories.filter( (x) => x.name === from )[0];
+                    subcategory.name = to;
+                    const categorySelector = mainContainer.down('[name=category]');
+                    const subcategorySelector = mainContainer.down('[name=subcategory]');
+                    if (categorySelector.getValue() === category) {
+                        updateSubcategoryList();
+                    }
+                    if (categorySelector.getValue() === category && subcategorySelector.getValue() === from) {
+                        subcategorySelector.setValue(to);
+                    }
+
+                    for (let record of store.getRange()) {
+                        if (record.get('category') === category && record.get('subcategory') === from) {
+                            record.set('subcategory', to);
+                            record.commit();
+                        }
+                    }
+                });
+
+                panel.on('category-added', ({category}) => {
+
+                });
+
+                wnd.show();
+                panel.loadData(mainContainer.data);
             }
         }],
         columns: [{
@@ -596,6 +727,7 @@ async function getLandscapeYmlEditor() {
             }
         }
     }
+
     const onUpdateEntry = async function() {
         const item = sm.getSelection()[0];
         if (!item) {
@@ -645,28 +777,20 @@ async function getLandscapeYmlEditor() {
     }
 
     // keep a current selection
-    const selectedItemId = window.localStorage.getItem('selected-' + window.activeBackend.getDescription());
-    const selectedItem = store.getRange().filter( (x) => x.data.id === selectedItemId)[0];
-    if (selectedItem) {
-        setTimeout( () => {
-            grid.getSelectionModel().select([selectedItem]);
-            grid.on('viewready', function() {
-                grid.getView().el.dom.querySelector('.x-grid-row-selected').scrollIntoView();
-            });
-        }, 100);
-    }
 
     const descriptionPanel = new Ext.Panel({
+        frame: true,
         bodyPadding: 10,
         region: 'south',
         text: 'Selected Field Information',
         width: '100%',
-        height: 100,
+        height: 130,
         layout: 'fit',
         items: [{ xtype: 'box' }]
     });
 
     const editor = new Ext.Panel({
+        frame: true,
         title: 'Edit selected item',
         layout: 'form',
         bodyPadding: 10,
@@ -690,7 +814,7 @@ async function getLandscapeYmlEditor() {
                 width: 120,
                 store: new Ext.data.JsonStore({
                     fields: ['id', 'name'],
-                    data: content.landscape.map( (x) => ({ id: x.name, name: x.name }))
+                    data: []
                 }),
                 editable: false,
                 value: 'all',
@@ -769,7 +893,7 @@ async function getLandscapeYmlEditor() {
                 height: 15,
                 items: [{
                     x: 110,
-                    y: 4,
+                    y: 1,
                     xtype: 'box',
                     cls: 'x-form-item-label',
                     html: `<i>https://twitter.com/</i>`
@@ -793,7 +917,7 @@ async function getLandscapeYmlEditor() {
                 height: 20,
                 items: [{
                     x: 110,
-                    y: 9,
+                    y: 6,
                     xtype: 'box',
                     cls: 'x-form-item-label',
                     html: `<i>https://www.crunchbase.com/organization/</i>`
@@ -817,7 +941,7 @@ async function getLandscapeYmlEditor() {
                 height: 20,
                 items: [{
                     x: 110,
-                    y: 9,
+                    y: 6,
                     xtype: 'box',
                     cls: 'x-form-item-label',
                     html: `<i>https://github.com/</i>`
@@ -841,7 +965,7 @@ async function getLandscapeYmlEditor() {
                 height: 20,
                 items: [{
                     x: 110,
-                    y: 9,
+                    y: 6,
                     xtype: 'box',
                     cls: 'x-form-item-label',
                     html: `<i>https://github.com/</i>`
@@ -865,7 +989,7 @@ async function getLandscapeYmlEditor() {
                 height: 20,
                 items: [{
                     x: 110,
-                    y: 9,
+                    y: 6,
                     xtype: 'box',
                     cls: 'x-form-item-label',
                     width: 350,
@@ -915,7 +1039,7 @@ async function getLandscapeYmlEditor() {
                 width: 120,
                 store: new Ext.data.JsonStore({
                     fields: ['id', 'name'],
-                    data: [{id: '', name: '(no project)'}].concat(projects)
+                    data: []
                 }),
                 editable: false,
                 value: '',
@@ -1106,62 +1230,8 @@ async function getLandscapeYmlEditor() {
 
     const sm = grid.getSelectionModel();
 
-    async function saveChanges() {
-        const rows = store.getRange();
-        const newContent = { landscape: [] };
-        const categories = {};
-        const subcategories = {};
-
-        for (var record of rows) {
-            const categoryKey = record.get('category');
-            if (!categories[categoryKey]) {
-                categories[categoryKey] = {
-                    category: '',
-                    name: categoryKey,
-                    subcategories: []
-                }
-                newContent.landscape.push(categories[categoryKey]);
-            }
-            const subcategoryKey = `${record.get('category')}:${record.get('subcategory')}`;
-            if (!subcategories[subcategoryKey]) {
-                subcategories[subcategoryKey] = {
-                    subcategory: '',
-                    name: record.get('subcategory'),
-                    items: []
-                }
-                categories[categoryKey].subcategories.push(subcategories[subcategoryKey]);
-            }
-
-            const item = record.get('original') || {
-                item: ''
-            };
-            const source = record.get('source') || '';
-
-            for (var key of allowedKeys) {
-                const value = record.get(key);
-                if (value !== '') {
-                    item[key] = value;
-                    if (source.includes(`            ${key}:\n`) && value === null) {
-                        item[key] = 'originally-empty-null';
-                    }
-                } else {
-                    delete item[key];
-                }
-            }
-
-            subcategories[subcategoryKey].items.push(item);
-
-        }
-
-        const yml = yaml2json(newContent);
-        Ext.Msg.wait('Saving landscape.yml');
-        await activeBackend.writeFile({name: 'landscape.yml', content: yml});
-        Ext.Msg.hide();
-
-        //wnd.close();
-    }
-
-    const bottom = new Ext.Panel({
+    const bottom = new Ext.ComponentMgr.create({
+        xtype: 'container',
         layout: {type: 'hbox', align: 'center'},
         height: 50,
         region: 'south',
@@ -1170,7 +1240,7 @@ async function getLandscapeYmlEditor() {
             xtype: 'button',
             scale: 'medium',
             text: 'Save landscape.yml',
-            handler: saveChanges
+            handler: () => saveChanges(store)
         }, {
             xtype: 'box',
             flex: 1
@@ -1187,18 +1257,53 @@ async function getLandscapeYmlEditor() {
     const mainContainer = new Ext.Container({
         layout: 'border',
         title: 'Edit landscape.yml',
-        items: [grid, {
-            region: 'east',
-            xtype: 'panel',
-            width: 500,
+        items: [{
+            xtype: 'container',
+            region: 'center',
+            items: [ grid ],
             layout: {
+                padding: 5,
+                type: 'vbox',
+                align: 'stretch'
+            }
+        }, {
+            region: 'east',
+            xtype: 'container',
+            width: 500,
+            bodyPadding: 15,
+            layout: {
+                padding: 5,
                 type: 'vbox',
                 align: 'stretch'
             },
-            items: [editor, descriptionPanel]
+            items: [editor, { xtype: 'box', height: 20 }, descriptionPanel]
                 // editor,
                 // descriptionPanel]
         }, bottom],
+        loadData: function(data) {
+            if (data) {
+                this.data = data;
+            } else {
+                data = this.data;
+            }
+            if (!this.rendered) {
+                this.on('afterrender', () => this.loadData());
+            } else {
+                store.loadData(data.items);
+                this.down('[name=category]').store.loadData(data.landscape.map( (x) => ({ id: x.name, name: x.name })));
+                this.down('[name=project]').store.loadData([{id: '', name: '(no project)'}].concat(data.projects));
+                const selectedItemId = window.localStorage.getItem('selected-' + window.activeBackend.getDescription());
+                const selectedItem = store.getRange().filter( (x) => x.data.id === selectedItemId)[0];
+                if (selectedItem) {
+                    setTimeout( () => {
+                        grid.getSelectionModel().select([selectedItem]);
+                        grid.on('viewready', function() {
+                            grid.getView().el.dom.querySelector('.x-grid-row-selected').scrollIntoView();
+                        });
+                    }, 100);
+                }
+            }
+        },
         width: 1124,
         height: 818
     });
@@ -1214,7 +1319,7 @@ async function getLandscapeYmlEditor() {
 
     function updateSubcategoryList() {
         const category = editor.down('[name=category]').getValue();
-        const categoryEntry = content.landscape.filter( (x) => x.name === category)[0];
+        const categoryEntry = mainContainer.data.landscape.filter( (x) => x.name === category)[0];
         let list = [];
         if (categoryEntry) {
             list = categoryEntry.subcategories.map( (x) => ({ id: x.name, name: x.name }));
@@ -1265,6 +1370,145 @@ async function getLandscapeYmlEditor() {
     }
 
     return mainContainer;
+}
+
+function getCategoriesEditor() {
+    const panel = new Ext.Panel({
+        header: false,
+        bodyPadding: 10,
+        layout: {
+            type: 'border',
+        },
+        items: [{
+            xtype: 'container',
+            region: 'north',
+            height: 80,
+            html: ` <pre style="color: white;">
+Here you can add, rename and delete categories and subcategores.  Double click on category or subcategory to change the name.
+Click once to select a row, then choose a 'Delete' button to delete an item or 'New' to add one
+After adding a new category or subcategory - close this modal window and add at least one item to the new category/subcategory
+              </pre> `
+        }, {
+            region: 'center',
+            xtype: 'container',
+            layout: {
+                type: 'hbox',
+                align: 'stretch'
+            },
+            items: [{
+                width: 480,
+                xtype: 'grid',
+                tbar: [{
+                    xtype: 'button',
+                    text: 'Add'
+                }, '-', {
+                    xtype: 'button',
+                    text: 'Delete'
+
+                }],
+                itemId: 'categories',
+                title: 'Categories',
+                columns: [{text: 'name', dataIndex: 'name', flex: 1, sortable: false, editor: { xtype: 'textfield' }}],
+                plugins: [Ext.create('Ext.grid.plugin.CellEditing', { clicksToEdit: 2 })],
+                store: new Ext.data.JsonStore({
+                    fields: ['id', 'name', 'children']
+                })
+            }, { xtype: 'box', width: 10 }, {
+                width: 480,
+                xtype: 'grid',
+                tbar: [{
+                    xtype: 'button',
+                    text: 'Add'
+                }, '-', {
+                    xtype: 'button',
+                    text: 'Delete'
+                }],
+                itemId: 'subcategories',
+                title: 'Subcategories',
+                columns: [{text: 'name', dataIndex: 'name', flex: 1, sortable: false, editor: { xtype: 'textfield' }}, { text: '#', width: 40, sortable: false, dataIndex: 'count'}],
+                plugins: [Ext.create('Ext.grid.plugin.CellEditing', { clicksToEdit: 2 })],
+                store: new Ext.data.JsonStore({
+                    fields: ['id', 'name', 'count']
+                })
+            }]
+        }],
+        loadData: function(data) {
+            if (data) {
+                this.data = data;
+            } else {
+                data = this.data;
+            }
+            if (!this.rendered) {
+                this.on('afterrender', () => this.loadData());
+            } else {
+                const storeCategories = this.down('#categories').store;
+                const storeSubcategories = this.down('#subcategories').store;
+
+                // data is just records
+                // const categories = {};
+                // for (var item of data) {
+                    // if (!categories[item.get('category')]) {
+                        // categories[item.get('category')] = {
+                            // name: item.get('category'),
+                            // subcategories: {}
+                        // }
+                    // }
+                    // const category = categories[item.get('category')];
+                    // if (!category.subcategories[item.get('subcategory')]) {
+                        // category.subcategories[item.get('subcategory')] = {
+                            // name: item.get('subcategory'),
+                            // items: []
+                        // }
+                    // }
+                    // const subcategory = category.subcategories[item.get('subcategory')];
+                    // subcategory.items.push(item);
+                // }
+
+                storeCategories.loadData(data.landscape.map( (x) => ({ id: x.name, name: x.name, children: x.subcategories })));
+            }
+        }
+    });
+    panel.on('afterrender', function() {
+      const gridCategories = this.down('#categories');
+      const gridSubcategories = this.down('#subcategories');
+
+      const handleSelectedCategory = () => {
+          const selected = gridCategories.getSelectionModel().getSelection()[0];
+          if (!selected) {
+              gridSubcategories.store.loadData([]);
+          } else {
+              const children = selected.get('children');
+              gridSubcategories.store.loadData(children.map( (x) => ({ id: x.name, name: x.name, count: x.items.length })));
+          }
+      }
+      gridCategories.getSelectionModel().on('selectionchange', handleSelectedCategory);
+
+      gridCategories.store.on('update', (store, record) => {
+          if (gridCategories.ignoreUpdate) {
+              return;
+          }
+          const prevName = record.modified.name;
+          const newName = record.data.name;
+          panel.fireEvent('category-renamed', { from: prevName, to: newName });
+          gridCategories.ignoreUpdate = true;
+          record.commit();
+          gridCategories.ignoreUpdate = false;
+      });
+      gridSubcategories.store.on('update', (store, record) => {
+          if (gridSubcategories.ignoreUpdate) {
+              return;
+          }
+          const category = gridCategories.getSelectionModel().getSelection()[0].get('name');
+          const prevName = record.modified.name;
+          const newName = record.data.name;
+          panel.fireEvent('subcategory-renamed', { category, from: prevName, to: newName });
+          gridSubcategories.ignoreUpdate = true;
+          record.commit();
+          gridSubcategories.ignoreUpdate = false;
+      });
+
+    });
+    return panel;
 }
 
 function getYarnFetchPanel() {
@@ -1475,9 +1719,12 @@ function getPreviewPanel() {
 }
 
 async function getMainPanel() {
-    const landscapeYmlEditor = await getLandscapeYmlEditor();
+    const data = await loadYmlFiles();
+    const landscapeYmlEditor = getLandscapeYmlEditor();
     const yarnFetchPanel = getYarnFetchPanel();
     const previewPanel = getPreviewPanel();
+
+    landscapeYmlEditor.loadData(data);
 
 
     const mainPanel = new Ext.Panel({
@@ -1545,6 +1792,9 @@ async function getMainPanel() {
             mainPanel.down('#pullrequest').urlLink = url;
         }
     });
+
+
+
 
     return mainPanel;
 
