@@ -1726,42 +1726,57 @@ async function getMainPanel() {
 
     landscapeYmlEditor.loadData(data);
 
+    const statusBar = new Ext.ComponentMgr.create({
+        style: {
+            overflow: 'visible',
+            position: 'absolute',
+            'z-index': 1,
+            left: '400px',
+            width: 'calc(100% - 400px)',
+            color: 'white',
+            top: '-2px'
+        },
+        xtype: 'container',
+        renderTo: Ext.getBody(),
+        layout: {
+            type: 'hbox',
+            align: 'stretch'
+        },
+        height: 30,
+        items: [{
+            xtype: 'box',
+            autoEl: {
+                style: {
+                    padding: 10,
+                    fontSize: 16
+                },
+                cn: `Connected to ${activeBackend.getDescription()}`
+            }
+        }, {
+            itemId: 'pullrequest',
+            xtype: 'button',
+            scale: 'medium',
+            text: 'Create a Pull Request',
+            handler: function() {
+                window.open(this.urlLink, '_blank').focus();
+                this.hide();
+            },
+            style: {
+                background: 'red'
+            }
+        }]
+    });
+
 
     const mainPanel = new Ext.Panel({
-        title: 'Interactive Landscape Editor V1.0',
+        // title: 'Interactive Landscape Editor V1.0',
+        header: false,
         layout: {
             type: 'vbox',
             align: 'stretch'
         },
         items: [{
             xtype: 'container',
-            layout: {
-                type: 'hbox',
-                align: 'stretch'
-            },
-            height: 30,
-            items: [{
-                xtype: 'box',
-                autoEl: {
-                    style: {
-                        padding: 10,
-                        fontSize: 16
-                    },
-                    cn: `Connected to ${activeBackend.getDescription()}`
-                }
-            }, {
-                itemId: 'pullrequest',
-                xtype: 'button',
-                scale: 'medium',
-                text: 'Create a Pull Request',
-                handler: function() {
-                    window.open(this.urlLink, '_blank').focus();
-                    this.hide();
-                },
-                style: {
-                    background: 'red'
-                }
-            }]
         }, {
             flex: 1,
             xtype: 'tabpanel',
@@ -1781,15 +1796,15 @@ async function getMainPanel() {
         }]
     });
 
-    mainPanel.down('#pullrequest').hide();
+    statusBar.down('#pullrequest').hide();
 
     Ext.globalEvents.on('message', function(data) {
         const match = data.text.match(/https:\/\/github.com(.*?)\/pull\/new\/(\S+)/);
         if (match && match[0]) {
             const url = match[0];
-            mainPanel.down('#pullrequest').show();
-            mainPanel.down('#pullrequest').el.highlight();
-            mainPanel.down('#pullrequest').urlLink = url;
+            statusBar.down('#pullrequest').show();
+            statusBar.down('#pullrequest').el.highlight();
+            statusBar.down('#pullrequest').urlLink = url;
         }
     });
 
