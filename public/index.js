@@ -530,6 +530,7 @@ async function loadYmlFiles() {
     return {
         projects,
         items,
+        settings: settingsContent,
         landscape: content.landscape
     }
 
@@ -586,6 +587,188 @@ async function saveChanges(store) {
     Ext.Msg.wait('Saving landscape.yml');
     await activeBackend.writeFile({name: 'landscape.yml', content: yml});
     Ext.Msg.hide();
+}
+
+function getSettingsYmlEditor() {
+
+    const defaultEditorSettings = {
+        frame: true,
+        layout: 'form',
+        bodyPadding: 10,
+        margin: 10,
+        bodyStyle: {
+            overflowY: 'auto'
+        },
+        defaults: {
+            width: 190,
+            margins: '10 0'
+        }
+    };
+    const editorGlobal = new Ext.Panel({
+        ...defaultEditorSettings,
+        title: 'settings.yml global:',
+        section: 'global',
+        items: [{
+            xtype: 'textfield',
+            fieldLabel: 'name',
+            name: 'name',
+            description: 'A full description'
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'short_name',
+            name: 'short_name',
+            description: `
+            
+            `
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'repo',
+            name: 'repo',
+            description: ` A repository name in a format like <b>cncf/landscape</b> where this repository is stored. Used for an automatic updater
+            `
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'website',
+            name: 'website',
+            description: ` a full url like https://landscape.cncf.io where this
+            site is deployed `
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'short_domain',
+            name: 'short_domain',
+            description: ` short domain `
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'company_url',
+            name: 'company_url',
+            description: `
+              a url to the company like https://cncf.io
+            `
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'email',
+            name: 'email',
+            description: ``
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'membership',
+            name: 'membership',
+            description: `A category name which contains a list of members.`
+        }]
+    });
+
+    const editorTwitter = new Ext.Panel({
+        title: 'settings.yml twitter:',
+        section: 'twitter',
+        ...defaultEditorSettings,
+        items: [{
+            xtype: 'textfield',
+            fieldLabel: 'url',
+            name: 'url',
+            description: 'A full description'
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'search',
+            name: 'search',
+            description: 'A full description'
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'text',
+            name: 'text',
+            description: 'What text would be twitted'
+        }]
+    });
+
+    const editor = new Ext.Container({
+        flex: 1,
+        style: {
+            overflowY: 'auto'
+        },
+        items: [editorGlobal, editorTwitter] 
+    });
+
+    const descriptionPanel = new Ext.Panel({
+        flex: 1,
+        frame: true,
+        bodyPadding: 10,
+        title: 'Choose a field to get its description',
+        layout: 'fit',
+        items: [{ xtype: 'box' }]
+    });
+
+    editor.on('afterrender', function() {
+        const fields = editor.query('[name]');
+        for (var item of fields) {
+            const updateDescription = function(item) {
+                descriptionPanel.setTitle('Info: ' + item.name);
+                descriptionPanel.down('[xtype=box]').update(item.description || 'No description')
+            }
+            item.on('focus', updateDescription);
+            item.on('mouseover', updateDescription);
+        }
+    });
+
+    const bottom = new Ext.ComponentMgr.create({
+        xtype: 'container',
+        layout: {type: 'hbox', align: 'center'},
+        height: 50,
+        region: 'south',
+        items: [{
+            margins: 10,
+            xtype: 'button',
+            scale: 'medium',
+            text: 'Save settings.yml'
+        }, {
+            xtype: 'box',
+            flex: 1
+        }, {
+            margins: 10,
+            xtype: 'button',
+            text: 'Reload',
+            handler: function() {
+                //wnd.close();
+            }
+        }]
+    });
+
+    const mainContainer = new Ext.Container({
+        layout: 'border',
+        items: [{
+            region: 'center',
+            xtype: 'container',
+            bodyPadding: 15,
+            layout: {
+                padding: 5,
+                type: 'vbox',
+                align: 'stretch'
+            },
+            items: [editor]
+        }, {
+            xtype: 'container',
+            region: 'east',
+            width: 500,
+            layout: {
+                padding: 5,
+                type: 'vbox',
+                align: 'stretch',
+            },
+            items: [ descriptionPanel]
+        }, bottom],
+        loadData: function(data) {
+            if (data) {
+                this.data = data;
+            } else {
+                data = this.data;
+            }
+            if (!this.rendered) {
+                this.on('afterrender', () => this.loadData());
+            } else {
+
+            }
+        }
+    });
+
+    return mainContainer;
 }
 
 function getLandscapeYmlEditor() {
@@ -1304,7 +1487,7 @@ function getLandscapeYmlEditor() {
 
     const mainContainer = new Ext.Container({
         layout: 'border',
-        title: 'Edit landscape.yml',
+        title: 'landscape.yml',
         items: [{
             xtype: 'container',
             region: 'center',
@@ -1819,18 +2002,21 @@ function getPreviewPanel() {
 
 async function getMainPanel() {
     const data = await loadYmlFiles();
+
     const landscapeYmlEditor = getLandscapeYmlEditor();
+    const settingsYmlEditor = getSettingsYmlEditor();
     const yarnFetchPanel = getYarnFetchPanel();
     const previewPanel = getPreviewPanel();
 
     landscapeYmlEditor.loadData(data);
+    settingsYmlEditor.loadData(data);
 
     const statusBar = new Ext.ComponentMgr.create({
         style: {
             overflow: 'visible',
             position: 'absolute',
             'z-index': 1,
-            left: '400px',
+            left: '500px',
             width: 'calc(100% - 400px)',
             color: 'white',
             top: '-2px'
@@ -1880,9 +2066,13 @@ async function getMainPanel() {
             flex: 1,
             xtype: 'tabpanel',
             items: [{
-                title: 'Edit landscape.yml',
+                title: 'landscape.yml',
                 layout: 'fit',
                 items: [ landscapeYmlEditor ]
+            }, {
+                title: 'settings.yml',
+                layout: 'fit',
+                items: [ settingsYmlEditor ]
             }, {
                 title: 'Fetch data',
                 layout: 'fit',
