@@ -365,7 +365,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"parseurl@npm:~1.3.3":
+"parseurl@npm:^1.3.3, parseurl@npm:~1.3.3":
   version: 1.3.3
   resolution: "parseurl@npm:1.3.3"
   checksum: 52c9e86cb58e38b28f1a50a6354d16648974ab7a2b91b209f97102840471de8adf524427774af6d5bc482fb7c0a6af6ba08ab37de9a1a7ae389ebe074015914b
@@ -436,7 +436,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"send@npm:0.17.1":
+"send@npm:0.17.1, send@npm:^0.17.1":
   version: 0.17.1
   resolution: "send@npm:0.17.1"
   dependencies:
@@ -528,6 +528,8 @@ __metadata:
     cookie-parser: ^1.4.5
     express: ^4.17.1
     http-proxy: ^1.18.1
+    parseurl: ^1.3.3
+    send: ^0.17.1
     serve-static: ^1.14.1
     ws: ^7.4.6
   languageName: unknown

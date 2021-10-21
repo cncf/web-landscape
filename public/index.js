@@ -260,6 +260,7 @@ function attachWebsocket() {
         const data = JSON.parse(event.data);
         if (data.type === 'id') {
             window.socketId = data.id;
+            Ext.util.Cookies.set('socketId', data.id);
             console.info(`Socket: ${data.id}`);
         }
         if (data.type === 'message') {
@@ -268,9 +269,21 @@ function attachWebsocket() {
                 text: data.text
             });
         }
+
         if (data.type === 'finish') {
-            Ext.globalEvents.fireEvent('finish');
+            Ext.globalEvents.fireEvent('finish', {
+                target: data.target,
+                code: data.code
+            });
         }
+
+        if (data.type === 'status') {
+            Ext.globalEvents.fireEvent('status', {
+                target: data.target,
+                status: data.status
+            });
+        }
+
         if( data.type === 'files') {
             Ext.globalEvents.fireEvent('filesstarted', data.files.length);
             for (let entry of data.files) {
@@ -1901,6 +1914,11 @@ function getPreviewPanel() {
                     x: 20,
                     y: 5,
                     text: 'Start dev server',
+                }, {
+                    xtype: 'box',
+                    itemId: 'status',
+                    x: 150,
+                    y: 5
                 }]
             }]
         }, {
@@ -1926,6 +1944,10 @@ function getPreviewPanel() {
         panel.down('#terminal').el.dom.appendChild(textEl);
     }
 
+    const clearMessages = function() {
+        panel.down('#terminal').el.setHTML('');
+    }
+
     Ext.globalEvents.on('message', function(data) {
         if (data.target === 'server') {
             const textEl = document.createElement('span');
@@ -1933,37 +1955,23 @@ function getPreviewPanel() {
             panel.down('#terminal').el.dom.appendChild(textEl);
         }
     });
+    Ext.globalEvents.on('status', function(data) {
+        if (data.target === 'server') {
+            panel.down('#status').el.setHTML(`Server status: ${data.status}`);
+        }
+    });
+    Ext.globalEvents.on('finish', function(data) {
+        if (data.target === 'server') {
+            if (data.code === 0) {
+                const iframeTag = panel.down('#iframe').el.dom;
+                iframeTag.src = "/landscape";
+                iframeTag.style.opacity = 1;
+            }
+        }
+    });
 
     panel.down('#start').on('click', async function() {
-        panel.down('#start').disable();
-        let files = null;
-        if (activeBackend.type === 'local') {
-            addMessage(`Collecting local files`);
-            files = await collectAllFiles();
-            window.allFiles = files;
-            addMessage(`Uploading local files`);
-        }
-
-        await fetch('api/server', {
-            body: JSON.stringify({ socketId: socketId, files: files ? Object.values(files) : null}),
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json' 
-            }
-        });
-
-        addMessage(`Dev server started`);
-
-        panel.down('#start').setText('Dev server is already running');
-
-        const iframeTag = panel.down('#iframe').el.dom;
-        iframeTag.src = "/landscape";
-        iframeTag.style.opacity = 1;
-
-        if (activeBackend.type === 'local') {
-            listenForFileChanges();
-        }
+        await build();
     });
 
     function listenForFileChanges() {
@@ -1996,6 +2004,35 @@ function getPreviewPanel() {
             fn();
         }
     }
+
+    async function build() {
+        clearMessages();
+        panel.down('#start').disable();
+        let files = null;
+        if (activeBackend.type === 'local') {
+            addMessage(`Collecting local files`);
+            files = await collectAllFiles();
+            window.allFiles = files;
+            addMessage(`Uploading local files`);
+        }
+        panel.down('#start').enable();
+        await fetch('api/build', {
+            body: JSON.stringify({ socketId: socketId, files: files ? Object.values(files) : null}),
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json' 
+            }
+        });
+        addMessage(`Build started`);
+    }
+
+    panel.on('afterrender', async () => {
+        await build();
+        if (activeBackend.type === 'local') {
+            listenForFileChanges();
+        }
+    });
 
     return panel;
 }
@@ -2065,6 +2102,7 @@ async function getMainPanel() {
         }, {
             flex: 1,
             xtype: 'tabpanel',
+            deferredRender: false,
             items: [{
                 title: 'landscape.yml',
                 layout: 'fit',
