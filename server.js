@@ -122,12 +122,15 @@ async function uploadFiles(req, res) {
     if (req.body.files) {
         const socketId = req.body.socketId;
         const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
+        const previewPath = path.resolve(tmpFolder, socketId, 'preview');
         await utils.uploadFiles({files: req.body.files, landscapePath: tmpPath});
+        await utils.uploadFiles({files: req.body.files, landscapePath: previewPath});
     }
 }
 
 app.post('/api/upload', async function(req, res) {
     await uploadFiles(req, res);
+    build({req, res});
 });
 
 async function initializePreview(socketId) {
@@ -362,7 +365,7 @@ async function build({req, res }) {
         }
     }
 
-    const cmd = `FORCE_COLOR=0 PROJECT_NAME=landscape PROJECT_PATH=../preview yarn preview`;
+    const cmd = `PREVIEW=1 FORCE_COLOR=0 PROJECT_NAME=landscape PROJECT_PATH=../preview yarn preview`;
     const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: appPath, detached: true });
     console.info({cmd, appPath, pid: pid.pid});
 
@@ -383,7 +386,7 @@ async function build({req, res }) {
 
     pid.on('close', (code) => {
         if (pid.pid !== serverData[socketId].pid) {
-            return; // obsolete
+            return; // obsolete process
         }
         serverData[socketId] = {
           pid: null,

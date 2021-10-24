@@ -1962,7 +1962,7 @@ function getYarnFetchPanel() {
         }
     });
 
-    Ext.globalEvents.on('finish', function() {
+    Ext.globalEvents.on('finish', function(data) {
         if (data.target === 'fetch') {
             addMessage('Finished fetching data');
             button.enable();
