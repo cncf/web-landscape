@@ -87,7 +87,7 @@ async function cleanup() {
         const createdTime = (await fs.stat(path.resolve(tmpFolder, folder))).ctimeMs;
         if (new Date().getTime() > createdTime + maxTimeoutInMinutes * 60 * 1000) {
             log(`[Cleanup] Deleting a folder ${folder}`);
-            exec(`rm -rf "${path.join(tmpFolder, folder)}"`);
+            await fs.rm(path.join(tmpFolder, folder),    { force: true, recursive: true });
         }
     }
 
@@ -130,6 +130,25 @@ app.post('/api/upload', async function(req, res) {
     await uploadFiles(req, res);
 });
 
+async function initializePreview(socketId) {
+    const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
+    const previewPath = path.resolve(tmpFolder, socketId, 'preview');
+    const files = ['settings.yml', 'landscape.yml', 'processed_landscape.yml', 'images/', 'hosted_logos/', 'cached_logos/'];
+    const fullFiles = files.map( (x) => path.resolve(tmpPath, x));
+    await fs.rm(previewPath, {force: true, recursive: true});
+    await fs.mkdir(previewPath, {recursive: true });
+    await exec(`cp -r ${fullFiles.join(' ')} ${previewPath} `);
+}
+
+async function updatePreview({socketId, dir, name}) {
+    const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
+    const previewPath = path.resolve(tmpFolder, socketId, 'preview');
+
+    const srcFile = path.resolve(tmpPath, dir || '', name);
+    const dstFile = path.resolve(previewPath, dir || '', name);
+    await fs.copyFile(srcFile, dstFile);
+}
+
 app.post('/api/connect', async function(req, res) {
 
     const repoFolder = req.body.repo.replace('/', '-');
@@ -148,6 +167,7 @@ app.post('/api/connect', async function(req, res) {
     const fn = async () => {
         isUpdatingLandscape[req.body.repo] = true;
         const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
+        const previewPath = path.resolve(tmpFolder, socketId, 'preview');
         await fs.mkdir(tmpPath, { recursive: true});
 
         const defaultBranch = (await exec(`cd tmp-landscapes/${repoFolder} && git rev-parse --abbrev-ref HEAD`)).stdout.trim();
@@ -172,6 +192,9 @@ app.post('/api/connect', async function(req, res) {
 
         pid.on('close', async (code) => {
             isUpdatingLandscape[req.body.repo] = false;
+            if (code === 0) {
+                await initializePreview(socketId);
+            }
             clientSocket.send(JSON.stringify({type: 'finish', target: 'connect', code }));
             res.json({success: true, pid: pid.pid});
         });
@@ -202,30 +225,43 @@ app.post('/api/upload-file', async function(req, res) {
     const socketId = req.body.socketId;
     const clientSocket = webSocketServer.allClients[socketId];
     const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
+    const previewPath = path.resolve(tmpFolder, socketId, 'preview');
+    const isPreview = req.body.mode === 'preview';
+    const targetPath = isPreview ? previewPath : tmpPath;
+
     try {
-        await fs.writeFile(path.resolve(tmpPath, req.body.dir || '', req.body.name), req.body.content);
+        await fs.writeFile(path.resolve(targetPath, req.body.dir || '', req.body.name), req.body.content);
     } catch(ex) {
         res.status(404);
         res.end('failed');
         return;
     }
 
-    const cmd = `git add . && git commit -m 'update ${req.body.name}' && git push origin HEAD`;
-    const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
+    if (!isPreview) {
+        await updatePreview({socketId, dir: req.body.dir, name: req.body.name });
 
-    pid.stdout.on('data', (data) => {
-        clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
-    });
+        const cmd = `git add . && git commit -m 'update ${req.body.name}' && git push origin HEAD`;
+        const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
 
-    pid.stderr.on('data', (data) => {
-        clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
-    });
+        pid.stdout.on('data', (data) => {
+            clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
+        });
 
-    pid.on('close', async (code) => {
-        clientSocket.send(JSON.stringify({type: 'finish', target: 'connect', code }));
-        res.json({success: true, code: code });
-    });
+        pid.stderr.on('data', (data) => {
+            clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
+        });
+
+        pid.on('close', async (code) => {
+            clientSocket.send(JSON.stringify({type: 'finish', target: 'connect', code }));
+            res.json({success: true, code: code });
+        });
+    } else {
+        build({req, res});
+        res.json({success: true, code: 0});
+    }
 });
+
+
 
 
 
@@ -281,13 +317,30 @@ app.post('/api/fetch', async (req, res) => {
     res.json({success: true, pid: pid.pid});
 });
 
-app.get('/api/build', async function(req) {
+app.get('/api/build', async function(req, res) {
     res.json(serverData[req.query.socketId]);
 });
 
-async function build({req, res }) {
-    await uploadFiles(req, res);
+app.post('/api/item-id', async function(req, res) {
     const socketId = req.body.socketId;
+    const fileName = path.resolve(tmpFolder, socketId, 'landscapeapp', 'out', 'data', 'items.json');
+    const content = JSON.parse(await fs.readFile(fileName, 'utf-8'));
+    const item = content.filter( (x) => x.path === req.body.path && x.name === req.body.name)[0]
+    if (item) {
+        res.json({id: item.id});
+    } else  {
+        res.json({success: false});
+    }
+});
+
+async function build({req, res }) {
+    const socketId = req.body.socketId;
+    if (serverData[socketId]) {
+        if (serverData[socketId].pid) {
+            process.kill(-serverData[socketId].pid);
+        }
+    }
+    await uploadFiles(req, res);
 
     const clientSocket = webSocketServer.allClients[socketId];
     console.info({socketId});
@@ -297,7 +350,6 @@ async function build({req, res }) {
     }
 
     const appPath = path.resolve(tmpFolder, socketId, 'landscapeapp');
-    const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
 
     try {
         await fs.access(appPath)
@@ -310,14 +362,8 @@ async function build({req, res }) {
         }
     }
 
-    if (serverData[socketId]) {
-        if (serverData[socketId].pid) {
-            process.kill(serverData[socketId].pid);
-        }
-    }
-
-    const cmd = `FORCE_COLOR=0 PROJECT_NAME=landscape PROJECT_PATH=../landscape yarn preview`;
-    const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: appPath });
+    const cmd = `FORCE_COLOR=0 PROJECT_NAME=landscape PROJECT_PATH=../preview yarn preview`;
+    const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: appPath, detached: true });
     console.info({cmd, appPath, pid: pid.pid});
 
     serverData[socketId] = {
@@ -336,6 +382,9 @@ async function build({req, res }) {
     });
 
     pid.on('close', (code) => {
+        if (pid.pid !== serverData[socketId].pid) {
+            return; // obsolete
+        }
         serverData[socketId] = {
           pid: null,
           status: code ? 'fail' : 'success'

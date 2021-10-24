@@ -35,6 +35,23 @@ const remoteBackend = {
                 'Content-Type': 'application/json' 
             }
         });
+    },
+
+    writePreview: async function({dir, name, content}) {
+        await fetch(`/api/upload-file`, {
+            body: JSON.stringify({
+                socketId: window.socketId,
+                dir,
+                content,
+                name,
+                mode: 'preview'
+            }),
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json' 
+            }
+        });
     }
 }
 
@@ -549,7 +566,7 @@ async function loadYmlFiles() {
 
 }
 
-async function saveChanges(store) {
+function prepareLandscapeYmlFromStore(store) {
     const rows = store.getRange();
     const newContent = { landscape: [] };
     const categories = {};
@@ -597,9 +614,19 @@ async function saveChanges(store) {
     }
 
     const yml = yaml2json(newContent);
+    return yml;
+}
+
+async function saveChanges(store) {
+    const yml = prepareLandscapeYmlFromStore(store);
     Ext.Msg.wait('Saving landscape.yml');
     await activeBackend.writeFile({name: 'landscape.yml', content: yml});
     Ext.Msg.hide();
+}
+
+async function savePreview(store) {
+    const yml = prepareLandscapeYmlFromStore(store);
+    await activeBackend.writePreview({name: 'landscape.yml', content: yml });
 }
 
 function getSettingsYmlEditor() {
@@ -793,6 +820,10 @@ function getLandscapeYmlEditor() {
         fields: fields
     });
 
+    const subscribeStore = () => {
+        store.on('datachanged', () => mainContainer.fireEvent('save-preview'));
+    }
+
     const grid = new Ext.grid.Panel({
         flex: 1,
         padding: 5,
@@ -928,6 +959,11 @@ function getLandscapeYmlEditor() {
                 wnd.show();
                 panel.loadData(mainContainer.data);
             }
+        }, '-', {
+            xtype: 'button',
+            enableToggle: true,
+            toggled: true,
+            text: 'Enable preview'
         }],
         columns: [{
             sortable: false,
@@ -977,6 +1013,7 @@ function getLandscapeYmlEditor() {
         if (!item) {
             return;
         }
+        const prevValue = JSON.stringify(item.data);
         const assign = function(name) {
             var value = editor.down(`[name=${name}]`).getValue();
             if (value === "null") {
@@ -1017,7 +1054,11 @@ function getLandscapeYmlEditor() {
         updateLogo();
         editor.doLayout();
 
-        // update img
+        item.commit();
+        const newValue = JSON.stringify(item.data);
+        if (newValue !== prevValue) {
+            mainContainer.fireEvent('save-preview');
+        }
     }
 
     // keep a current selection
@@ -1474,29 +1515,6 @@ function getLandscapeYmlEditor() {
 
     const sm = grid.getSelectionModel();
 
-    const bottom = new Ext.ComponentMgr.create({
-        xtype: 'container',
-        layout: {type: 'hbox', align: 'center'},
-        height: 50,
-        region: 'south',
-        items: [{
-            margins: 10,
-            xtype: 'button',
-            scale: 'medium',
-            text: 'Save landscape.yml',
-            handler: () => saveChanges(store)
-        }, {
-            xtype: 'box',
-            flex: 1
-        }, {
-            margins: 10,
-            xtype: 'button',
-            text: 'Reload',
-            handler: function() {
-                //wnd.close();
-            }
-        }]
-    });
 
     const mainContainer = new Ext.Container({
         layout: 'border',
@@ -1523,7 +1541,7 @@ function getLandscapeYmlEditor() {
             items: [editor, { xtype: 'box', height: 20 }, descriptionPanel]
                 // editor,
                 // descriptionPanel]
-        }, bottom],
+        }],
         loadData: function(data) {
             if (data) {
                 this.data = data;
@@ -1534,6 +1552,7 @@ function getLandscapeYmlEditor() {
                 this.on('afterrender', () => this.loadData());
             } else {
                 store.loadData(data.items);
+                subscribeStore;
                 this.down('[name=category]').store.loadData(data.landscape.map( (x) => ({ id: x.name, name: x.name })));
                 this.down('[name=project]').store.loadData([{id: '', name: '(no project)'}].concat(data.projects));
                 const selectedItemId = window.localStorage.getItem('selected-' + window.activeBackend.getDescription());
@@ -1552,14 +1571,99 @@ function getLandscapeYmlEditor() {
         height: 818
     });
 
-    sm.on('selectionchange', function() {
+    const previewSelectedItem = async function(options = {}) {
+        const selectedItem = sm.getSelection()[0];
+        if (!selectedItem) {
+            iframe.src = '';
+            return;
+        }
+        const response = await fetch('/api/item-id', {
+            method: 'POST',
+            body: JSON.stringify({
+                socketId: window.socketId, 
+                name: selectedItem.get('name'),
+                path: selectedItem.get('category') + ' / ' + selectedItem.get('subcategory')
+            }),
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json' 
+            }
+        });
+        const itemInfo = await response.json();
+        const iframe = document.querySelector('#grid-preview iframe');
+        if (itemInfo.id) {
+            if (!options.forceReload && iframe.contentWindow.landscapeRouter) {
+                iframe.contentWindow.landscapeRouter.push(`?selected=${itemInfo.id}`);
+            } else {
+                iframe.src = `/landscape?selected=${itemInfo.id}&style="body{zoom:0.7}"`;
+            }
+        } else {
+            iframe.src = '';
+        }
+    }
+
+    grid.on('afterrender', function() {
+        const parent = grid.el.dom;
+        Ext.DomHelper.append(Ext.getBody(), `
+          <div id="grid-preview" style="position: absolute; z-index: 1; width: 620px ; height: 400px; right: 490px; bottom: 0px;
+                       background: white; border: 1px solid black; border-radius: 5px; overflow: hidden;">
+              <div id="grid-preview-status" style="z-index: 2;position: absolute; top: 0; right: 0; height: 15px; width: 100px; color: white; text-align: center; background: rgb(21, 127,204);" ></div>
+              <iframe style="border: 0; position: relative; width: 1200px; height: 800px; left: -290px; top: -200px;"></iframe>
+          </div>
+        `);
+        grid.preview = document.querySelector('#grid-preview');
+        const iframe = grid.preview.querySelector('iframe');
+
+        Ext.globalEvents.on('finish', function(data) {
+            if (data.target === 'server') {
+                if (data.code === 0) {
+                    // we need to actually reload a page!
+                    previewSelectedItem({forceReload: true});
+                }
+            }
+        });
+
+        Ext.globalEvents.on('status', function(data) {
+            if (data.target === 'server') {
+                const el = document.querySelector('#grid-preview-status');
+                if (data.status === 'progress') {
+                    el.innerText = 'Building preview...'
+                } else if (data.status === 'success') {
+                    el.innerText = 'Preview ready'
+                } else if (data.status === 'failure') {
+                    el.innerText = 'Preview failed'
+                }
+            }
+        });
+
+        Ext.globalEvents.on('tabchange', function(tabId) {
+            const isVisible = tabId === 'landscape';
+            Ext.get(grid.preview).setVisible(isVisible);
+        });
+
+        grid.dockedItems.findBy( (x) => x.xtype === 'toolbar').items.insert(0,
+            new Ext.Button({
+                xtype: 'button',
+                text: 'Save landscape.yml',
+                handler: () => saveChanges(store),
+                scale: 'medium'
+            })
+        );
+
+    });
+
+    sm.on('selectionchange', async function() {
         checkSelection();
         const selectedItem = sm.getSelection()[0];
         if (selectedItem) {
             window.localStorage.setItem('selected-' + window.activeBackend.getDescription(), selectedItem.get('id'));
+            await previewSelectedItem();
+
         }
     });
     mainContainer.on('afterrender', () => checkSelection(), this, { delay: 1});
+    mainContainer.on('save-preview', () => savePreview(store), null, { buffer: 1000 });
+
 
     function updateSubcategoryList() {
         const category = editor.down('[name=category]').getValue();
@@ -1809,7 +1913,6 @@ After adding a new category or subcategory - close this modal window and add at 
 function getYarnFetchPanel() {
     const panel = new Ext.Panel({
         bodyPadding: 10,
-        title: 'Fetch external data',
         layout: {
             type: 'vbox',
             align: 'stretch'
@@ -1817,7 +1920,9 @@ function getYarnFetchPanel() {
         items: [{
             xtype: 'box',
             autoEl: {
-                cn: `Click 'Fetch' to get external data. The output is added to logs. Usually it takes 30 seconds`
+                cn: `Fetch and update external data from crunchbase, github, twitter and bestpractices. Preprocess svg images.
+                <br> Note: this command is used automatically during a netlify preview or a daily update.
+                <br> Changes to <b>landscape.yml</b> and <b>settings.yml</b> files will be saved first`
             }
         }, {
             xtype: 'container',
@@ -1858,9 +1963,11 @@ function getYarnFetchPanel() {
     });
 
     Ext.globalEvents.on('finish', function() {
-        addMessage('Finished fetching data');
-        button.enable();
-        button.setText('FETCH');
+        if (data.target === 'fetch') {
+            addMessage('Finished fetching data');
+            button.enable();
+            button.setText('FETCH');
+        }
     });
 
     Ext.globalEvents.on('filesstarted', function(count) {
@@ -1913,7 +2020,7 @@ function getPreviewPanel() {
                     xtype: 'button',
                     x: 20,
                     y: 5,
-                    text: 'Start dev server',
+                    text: 'Trigger a preview build',
                 }, {
                     xtype: 'box',
                     itemId: 'status',
@@ -1958,6 +2065,10 @@ function getPreviewPanel() {
     Ext.globalEvents.on('status', function(data) {
         if (data.target === 'server') {
             panel.down('#status').el.setHTML(`Server status: ${data.status}`);
+            if (data.status === 'progress') {
+                clearMessages();
+                addMessage('Build started');
+            }
         }
     });
     Ext.globalEvents.on('finish', function(data) {
@@ -2006,7 +2117,6 @@ function getPreviewPanel() {
     }
 
     async function build() {
-        clearMessages();
         panel.down('#start').disable();
         let files = null;
         if (activeBackend.type === 'local') {
@@ -2024,7 +2134,6 @@ function getPreviewPanel() {
                 'Content-Type': 'application/json' 
             }
         });
-        addMessage(`Build started`);
     }
 
     panel.on('afterrender', async () => {
@@ -2103,19 +2212,28 @@ async function getMainPanel() {
             flex: 1,
             xtype: 'tabpanel',
             deferredRender: false,
+            listeners: {
+                tabchange: (tabpanel, newTab) => {
+                    Ext.globalEvents.fireEvent('tabchange', newTab.itemId );
+                }
+            }, 
             items: [{
+                itemId: 'landscape',
                 title: 'landscape.yml',
                 layout: 'fit',
                 items: [ landscapeYmlEditor ]
             }, {
+                itemId: 'settings',
                 title: 'settings.yml',
                 layout: 'fit',
                 items: [ settingsYmlEditor ]
             }, {
+                itemId: 'fetch',
                 title: 'Fetch data',
                 layout: 'fit',
                 items: [ yarnFetchPanel ]
             }, {
+                itemId: 'preview',
                 title: 'Preview in real time',
                 layout: 'fit',
                 items: [ previewPanel]
