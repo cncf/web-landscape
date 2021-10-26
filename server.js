@@ -121,16 +121,13 @@ async function autoUpdate() {
 async function uploadFiles(req, res) {
     if (req.body.files) {
         const socketId = req.body.socketId;
-        const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
         const previewPath = path.resolve(tmpFolder, socketId, 'preview');
-        await utils.uploadFiles({files: req.body.files, landscapePath: tmpPath});
         await utils.uploadFiles({files: req.body.files, landscapePath: previewPath});
     }
 }
 
 app.post('/api/upload', async function(req, res) {
     await uploadFiles(req, res);
-    build({req, res});
 });
 
 async function initializePreview(socketId) {
@@ -279,7 +276,7 @@ app.post('/api/fetch', async (req, res) => {
         return;
     }
 
-    const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
+    const tmpPath = path.resolve(tmpFolder, socketId, req.body.mode === 'preview' ? 'preview' : 'landscape');
     // upload files to a temp folder
 
     const cmd = `FORCE_COLOR=0 PROJECT_PATH="${tmpPath}" yarn fetch`;
@@ -318,10 +315,6 @@ app.post('/api/fetch', async (req, res) => {
         }
     });
     res.json({success: true, pid: pid.pid});
-});
-
-app.get('/api/build', async function(req, res) {
-    res.json(serverData[req.query.socketId]);
 });
 
 app.post('/api/item-id', async function(req, res) {
@@ -412,10 +405,6 @@ app.use('/landscape', function(req, res) {
         const root = path.resolve('tmp', socketId, 'landscapeapp', 'out');
         send(req, parseUrl(req).pathname.replace('/landscape', ''), { root }).pipe(res)
     }
-});
-
-app.use('/api/status', function(req, res) {
-
 });
 
 app.use(function (err, req, res, next) {

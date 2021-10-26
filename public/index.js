@@ -71,6 +71,10 @@ const localBackend = {
         const stream = await handle.createWritable();
         await stream.write(content);
         await stream.close();
+        await remoteBackend.writePreview({dir, name, content});
+    },
+    writePreview: async function({dir, name, content}) {
+        await remoteBackend.writePreview({dir, name, content});
     }
 }
 window.activeBackend = null;
@@ -326,7 +330,6 @@ function attachWebsocket() {
                 }
             }
             Ext.globalEvents.fireEvent('filesfinished', data.files.length);
-            window.allFiles = await collectAllFiles();
         }
     };
 }
@@ -334,31 +337,23 @@ function attachWebsocket() {
 function getInitialForm() {
     const githubSelector = getGithubSelector();
     const initialForm = Ext.ComponentMgr.create({
+        width: 1020,
         height: 800,
         xtype: 'panel',
         title: 'Online landscape editor',
         bodyPadding: 10,
         items: [{
             xtype: 'box',
+            width: 1000,
             listeners: {
                 render: function() {
                     this.update(`
-                            <img src="images/cncf-color.svg">
-                            <h1> Welcome to CNCF online landscape editor. </h1>
-
+                            <img src="images/cncf-color.svg" style="height: 120px;">
                             <p>
                             This interactive landscape editor allows you connect to the existing landscape, either to the github repository or your local landscape folder, and add, edit or delete entries on the fly.
-                            </p>
-
-                            <p>
                             You may also fetch data from external services, such as crunchbase or github or bestpractices.
-                            </p>
-
-                            <p>
                             The most interesting feature is an ability to preview the results in real time.
                             </p>
-
-                            <h1>Please choose how do you want to connect to an interactive landscape</h1>
                         `);
                 }
             }
@@ -407,12 +402,25 @@ function getInitialForm() {
                 frame: true,
                 layout: 'absolute',
                 items: [{
+                    x: 20,
+                    y: 20,
+                    width: 300,
+                    xtype: 'box',
+                    autoEl: {
+                        cn: `
+                        Connect to your local folder with any landscape.
+                        All changes will be applied to your local folder.
+                        You'll need to give a read and write permission to it.
+                        `
+                    },
+                    hidden: !isChrome
+                }, {
                     x: 50,
                     y: 120,
                     width: 300,
                     xtype: 'button',
                     scale: 'large',
-                    text: 'Connect to your local folder',
+                    text: ` CONNECT `,
                     hidden: !isChrome
                 } , {
                     x: 5,
@@ -496,8 +504,20 @@ function getInitialForm() {
         const permission = await webFolder.requestPermission({mode: 'readwrite'});
         if (permission !== 'granted') {
             console.info('Permission to the folder was not provided');
+            Ext.Msg.alert('info', 'Please try again. We need a permission to read/write to the folder with a local checkout of a landscape');
+            return;
         }
         window.activeBackend = localBackend;
+        // upload files
+        const files = await collectAllFiles();
+        await fetch('api/upload', {
+            body: JSON.stringify({ socketId, files }),
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json' 
+            }
+        });
         openMainApp();
     });
     return initialForm;
@@ -530,7 +550,7 @@ const allowedKeys = [
 async function loadYmlFiles() {
     const settingsYmlContent = await activeBackend.readFile({name: 'settings.yml'});
     const settingsContent = jsyaml.load(settingsYmlContent);
-    const projects = settingsContent.relation.values.filter( (x) => x.id === 'hosted')[0].children.map(
+    const projects = (settingsContent.relation.values.filter( (x) => x.id === 'hosted')[0] || { children: []}).children.map(
         (x) => ({id: x.id, name: x.tag })
     );
     const landscapeYmlContent = await activeBackend.readFile({name: 'landscape.yml'});
@@ -1986,19 +2006,21 @@ function getYarnFetchPanel() {
         if (activeBackend.type === 'local') {
             addMessage(`Collecting local files`);
             files = await collectAllFiles();
-            window.allFiles = files;
             addMessage(`Uploading local files`);
         }
 
         await fetch('api/fetch', {
-            body: JSON.stringify({ socketId: socketId, files: files ? Object.values(files) : null}),
+            body: JSON.stringify({
+                socketId: socketId,
+                files: files ? Object.values(files) : null,
+                mode: activeBackend.type === 'local' ? 'preview' : ''
+            }),
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json' 
             }
         });
-
         addMessage( `Fecthing data at ${new Date().toISOString().substring(0, 20)}`);
     });
 
@@ -2085,44 +2107,12 @@ function getPreviewPanel() {
         await build();
     });
 
-    function listenForFileChanges() {
-        const fn = async function() {
-            if (!window.allFiles) {
-                return;
-            }
-            console.time('changes');
-            const changedFiles = await getChangedFiles(window.allFiles);
-            console.timeEnd('changes');
-            console.info(changedFiles);
-            if (changedFiles.length > 0) {
-                addMessage('Changes detected: uploading changes');
-                const files = await collectAllFiles();
-                window.allFiles = files;
-                await fetch('api/upload', {
-                    body: JSON.stringify({ socketId: socketId, files: Object.values(files)}),
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json' 
-                    }
-                });
-                addMessage('Changes uploaded');
-            }
-            setTimeout(fn, 1000);
-        };
-        if (!window.changesTimerSet) {
-            window.changesTimerSet = true;
-            fn();
-        }
-    }
-
     async function build() {
         panel.down('#start').disable();
         let files = null;
         if (activeBackend.type === 'local') {
             addMessage(`Collecting local files`);
             files = await collectAllFiles();
-            window.allFiles = files;
             addMessage(`Uploading local files`);
         }
         panel.down('#start').enable();
@@ -2138,9 +2128,6 @@ function getPreviewPanel() {
 
     panel.on('afterrender', async () => {
         await build();
-        if (activeBackend.type === 'local') {
-            listenForFileChanges();
-        }
     });
 
     return panel;
