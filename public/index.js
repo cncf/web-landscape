@@ -2046,8 +2046,8 @@ function getPreviewPanel() {
                 }, {
                     xtype: 'box',
                     itemId: 'status',
-                    x: 150,
-                    y: 5
+                    x: 190,
+                    y: 9
                 }]
             }]
         }, {
