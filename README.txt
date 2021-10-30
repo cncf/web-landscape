@@ -1,5 +1,5 @@
 Dev notes:
-Should use same node.js version as landscapeapp (17.0.1)
+Should use same node.js version as landscapeapp (16.12.0)
 
 Prod server: 86.109.11.205	
 to deploy: 
