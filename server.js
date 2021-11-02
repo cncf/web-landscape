@@ -128,6 +128,7 @@ async function uploadFiles(req, res) {
 
 app.post('/api/upload', async function(req, res) {
     await uploadFiles(req, res);
+    res.json({success: true});
 });
 
 async function initializePreview(socketId) {

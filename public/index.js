@@ -1,4 +1,5 @@
 // a remote backend is used when we checkout a branch on a server
+// n
 const isChrome = !!navigator.userAgent.match(/Chrome\/(\S+)/);
 const remoteBackend = {
     type: 'remote',
@@ -511,7 +512,7 @@ function getInitialForm() {
         // upload files
         const files = await collectAllFiles();
         await fetch('api/upload', {
-            body: JSON.stringify({ socketId, files }),
+            body: JSON.stringify({ socketId, files: Object.values(files) }),
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
@@ -659,6 +660,7 @@ function getSettingsYmlEditor() {
         bodyStyle: {
             overflowY: 'auto'
         },
+        labelWidth: 200,
         defaults: {
             width: 190,
             margins: '10 0'
@@ -714,6 +716,83 @@ function getSettingsYmlEditor() {
             fieldLabel: 'membership',
             name: 'membership',
             description: `A category name which contains a list of members.`
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'self',
+            name: 'self',
+            description: `A full link to the crunchbase company of your primary organization`
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'slack_channel',
+            name: 'slack_channel',
+            description: `A link to a special url in the slack channel, where deploy results are logged to`
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'meta.title',
+            name: 'meta.title',
+            description: `Meta tag used for a facebook and twitter. Name of a project`
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'meta.fb_admin',
+            name: 'meta.fb_admin',
+            description: `Meta tag used for a facebook and twitter. Name of a fb admin`
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'meta.description',
+            name: 'meta.description',
+            description: `Meta tag used for a facebook and twitter. Description of a website`
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'meta.twitter',
+            name: 'meta.twitter',
+            description: `A twitter account associated with this website. Used by twitter`
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'meta.google_site_verification',
+            name: 'meta.google_site_verification',
+            description: `For a google search console. When you add your website to a google search console - choose an html tag verification and update this field with a value which is shown from a google search console. This way you can proove to google that a site belongs to you.`
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'meta.ms_validate',
+            name: 'meta.ms_validate',
+            description: `For a bing search engine. When you add your website to bing analytics - choose an html tag verification and update this field with a recommended value from Bing. This way you can prove to MS that a site belongs to you`
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'flags.companies',
+            name: 'flags.companies',
+            description: `It is possible to mark a sertain Category as a list of companies`
+        }, {
+            xtype: 'textarea',
+            grow: true,
+            fieldLabel: 'flags.hide_license_for_categories',
+            name: 'flags.hide_license_for_categories',
+            description: `Please list here a list of categories, items under this categories will have their licenses hidden. One category name per line`,
+            setValue: function(v) {
+                const newValue = v && v.length ? v.join('\n') : '';
+                Ext.form.field.TextArea.prototype.setValue.call(this, newValue);
+            },
+            getValue: function() {
+                const originalValue = Ext.form.field.TextArea.prototype.getValue.call(this);
+                const values = originalValue.split('\n').filter( (x) => x.trim()).map( (x) => x.trim()).filter( (x) => !!x).map( (x) => (x));
+                const result = values;
+                return result.length > 0 ? result : '';
+            }
+        }, {
+            xtype: 'textarea',
+            grow: true,
+            fieldLabel: 'flags.hide_category_from_subcategories',
+            name: 'flags.hide_category_from_subcategories',
+            description: `a list of categories. For those categories the grouping label will be just <i>subcategory</i> while usually it is <i>category - subcategory</i>`,
+            setValue: function(v) {
+                const newValue = v && v.length ? v.join('\n') : '';
+                Ext.form.field.TextArea.prototype.setValue.call(this, newValue);
+            },
+            getValue: function() {
+                const originalValue = Ext.form.field.TextArea.prototype.getValue.call(this);
+                const values = originalValue.split('\n').filter( (x) => x.trim()).map( (x) => x.trim()).filter( (x) => !!x).map( (x) => (x));
+                const result = values;
+                return result.length > 0 ? result : '';
+            }
         }]
     });
 
@@ -739,12 +818,115 @@ function getSettingsYmlEditor() {
         }]
     });
 
+    const subsection = function(id) {
+        const panel = new Ext.Panel({
+            title: id ? `id: ${id}` : null,
+            frame: true,
+            layout: 'form',
+            width: '100%',
+            labelWidth: 200,
+            bodyPadding: 10,
+            ignoreAssignment: true,
+            items: [ id ? { type: 'box' } : {
+                xtype: 'textfield',
+                fieldLabel: 'id',
+                labelWidth: 100,
+                name: 'id'
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'label',
+                labelWidth: 100,
+                name: 'label'
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'prefix',
+                labelWidth: 100,
+                itemId: 'prefix',
+                name: 'prefix'
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'tag',
+                labelWidth: 100,
+                itemId: 'tag',
+                name: 'tag'
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'color',
+                labelWidth: 100,
+                itemId: 'color',
+                name: 'color'
+            }, {
+                xtype: 'numberfield',
+                fieldLabel: 'big_picture_order',
+                labelWidth: 100,
+                itemId: 'big_picture_order',
+                name: 'big_picture_order'
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'big_picture_label',
+                labelWidth: 100,
+                itemId: 'big_picture_label',
+                name: 'big_picture_label'
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'big_picture_color',
+                labelWidth: 100,
+                itemId: 'big_picture_color',
+                name: 'big_picture_color'
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'additional_relation',
+                labelWidth: 100,
+                itemId: 'additional_relation',
+                name: 'additional_relation'
+            }, id === 'hosted' ? {
+                xtype: 'container',
+                layout : {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                height: 20,
+                items: [{
+                    xtype: 'box',
+                    width: 100
+                }, {
+                    xtype: 'button',
+                    text: 'Add hosted project',
+                    handler: function() {
+                        panel.add(subsection());
+                        panel.doLayout();
+                    },
+                    height: 20
+                }]
+            } : { xtype: 'box'}]
+        });
+
+        return panel;
+    }
+
+    const editorRelation = new Ext.Panel({
+        title: 'settings.yml relation:',
+        section: 'relation',
+        ...defaultEditorSettings,
+        items: [{
+            xtype: 'textfield',
+            fieldLabel: 'label',
+            name: 'label',
+            description: 'How do we label this relation?'
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'url',
+            name: 'url',
+            description: 'How do we name this relation in the search part of the url?'
+        }, subsection('hosted'), subsection('company'), subsection('member'), subsection('false')]
+    });
+
     const editor = new Ext.Container({
         flex: 1,
         style: {
             overflowY: 'auto'
         },
-        items: [editorGlobal, editorTwitter] 
+        items: [editorGlobal, editorTwitter, editorRelation] 
     });
 
     const descriptionPanel = new Ext.Panel({
@@ -823,7 +1005,24 @@ function getSettingsYmlEditor() {
             if (!this.rendered) {
                 this.on('afterrender', () => this.loadData());
             } else {
-
+                // assign items here
+                const settings = data.settings;
+                const fields = editor.query('[name]');
+                for (let field of fields) {
+                    const section = field.up('[section]').section;
+                    const ignore = field.up('[ignoreAssignment]');
+                    const path = [section].concat(field.name.split('.'));
+                    const value = (function() {
+                        let target = settings;
+                        for (var part of path) {
+                            target = (target || {})[part];
+                        }
+                        return target;
+                    })();
+                    if (!ignore) {
+                        field.setValue(value);
+                    }
+                }
             }
         }
     });
