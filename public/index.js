@@ -246,7 +246,7 @@ function getGithubSelector() {
 
     form.down('[name=change]').on('click', function() {
         form.down('[name=branch]').setValue(generateBranchName());
-        const repo = from.down('[name=repo]').getValue();
+        const repo = form.down('[name=repo]').getValue();
         window.localStorage.setItem(`branch-${repo}`, form.down('[name=branch]').getValue());
 
     });
@@ -653,13 +653,9 @@ async function savePreview(store) {
 function getSettingsYmlEditor() {
 
     const defaultEditorSettings = {
-        frame: true,
         layout: 'form',
         bodyPadding: 10,
         margin: 10,
-        bodyStyle: {
-            overflowY: 'auto'
-        },
         labelWidth: 200,
         defaults: {
             width: 190,
@@ -670,6 +666,7 @@ function getSettingsYmlEditor() {
         ...defaultEditorSettings,
         title: 'settings.yml global:',
         section: 'global',
+        frame: true,
         items: [{
             xtype: 'textfield',
             fieldLabel: 'name',
@@ -721,6 +718,44 @@ function getSettingsYmlEditor() {
             fieldLabel: 'self',
             name: 'self',
             description: `A full link to the crunchbase company of your primary organization`
+        }, {
+            fieldLabel: 'skip_funding',
+            name: 'skip_funding',
+            description: `Set to true when you do not need a funding page. You may need this for a private repo too`,
+
+            xtype: 'combo',
+            displayField: 'name',
+            valueField: 'id',
+            store: new Ext.data.JsonStore({
+                fields: ['id', 'name'],
+                data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
+            }),
+            editable: false,
+            value: '',
+            queryMode: 'local',
+            selectOnFocus: false,
+            triggerAction: 'all',
+        }, {
+            fieldLabel: 'skip_crunchbase',
+            name: 'skip_crunchbase',
+            description: `Set to true if you don't want this project to use crunchbase at all. In landscape.yml items will use <b> organization</b> field instead of the <b>crunchbase</b> field`,
+
+            xtype: 'combo',
+            displayField: 'name',
+            valueField: 'id',
+            store: new Ext.data.JsonStore({
+                fields: ['id', 'name'],
+                data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
+            }),
+            editable: false,
+            value: '',
+            queryMode: 'local',
+            selectOnFocus: false,
+            triggerAction: 'all',
+            initComponent: function() {
+                Ext.form.field.ComboBox.prototype.initComponent.apply(this, arguments);
+                this.setValue('');
+            }
         }, {
             xtype: 'textfield',
             fieldLabel: 'slack_channel',
@@ -800,6 +835,7 @@ function getSettingsYmlEditor() {
         title: 'settings.yml twitter:',
         section: 'twitter',
         ...defaultEditorSettings,
+        frame: true,
         items: [{
             xtype: 'textfield',
             fieldLabel: 'url',
@@ -819,85 +855,169 @@ function getSettingsYmlEditor() {
     });
 
     const subsection = function(id) {
+        const hostedDescription = `This is a section for a hosted project. Here you can specify how you name your hosted project and make children like incubated, graduated or similar ids`;
+        const idNames = {
+            member: 'member',
+            company: 'company',
+            false: 'non-member'
+        };
+        const normalDescription = `This is a section for a ${idNames[id]} project. Specify all the necessary property.`;
+        const childrenDescription = `This is a section for a hosted project type. Specify all the necessary property. If you don't need this child just delete it`;
         const panel = new Ext.Panel({
-            title: id ? `id: ${id}` : null,
+            title: id !== null ? `id: ${id}` : null,
+            memberId: id,
             frame: true,
-            layout: 'form',
-            width: '100%',
-            labelWidth: 200,
-            bodyPadding: 10,
             ignoreAssignment: true,
-            items: [ id ? { type: 'box' } : {
-                xtype: 'textfield',
-                fieldLabel: 'id',
-                labelWidth: 100,
-                name: 'id'
+            margin: 5,
+            layout : {
+                type: 'vbox',
+                align: 'stretch'
+            },
+            items: [{
+                xtype: 'box',
+                margin: 10,
+                html: id === 'hosted' ? hostedDescription : id !== null ? normalDescription : childrenDescription
             }, {
-                xtype: 'textfield',
-                fieldLabel: 'label',
-                labelWidth: 100,
-                name: 'label'
+                xtype: 'container',
+                layout: {
+                    type: 'hbox'
+                },
+                items: [{
+                    ...defaultEditorSettings,
+                    xtype: 'container',
+                    layout: 'form',
+                    flex: 1,
+                    labelWidth: 200,
+                    items: [{
+                        xtype: 'textfield',
+                        fieldLabel: 'id',
+                        readOnly: id !== null,
+                        disabled: id !== null,
+                        labelWidth: 100,
+                        name: 'id'
+                    }, {
+                        xtype: 'textfield',
+                        fieldLabel: 'label',
+                        labelWidth: 100,
+                        name: 'label'
+                    }, {
+                        xtype: 'textfield',
+                        fieldLabel: 'url',
+                        labelWidth: 100,
+                        name: 'url'
+                    }, {
+                        xtype: 'textfield',
+                        fieldLabel: 'prefix',
+                        labelWidth: 100,
+                        itemId: 'prefix',
+                        name: 'prefix'
+                    }, {
+                        xtype: 'textfield',
+                        fieldLabel: 'tag',
+                        labelWidth: 100,
+                        itemId: 'tag',
+                        name: 'tag'
+                    }]
+                }, {
+                        ...defaultEditorSettings,
+                        xtype: 'container',
+                        layout: 'form',
+                        flex: 1,
+                        labelWidth: 200,
+                        items: [{
+                            xtype: 'textfield',
+                            fieldLabel: 'color',
+                            labelWidth: 100,
+                            itemId: 'color',
+                            name: 'color'
+                        }, {
+                            xtype: 'numberfield',
+                            fieldLabel: 'big_picture_order',
+                            labelWidth: 100,
+                            itemId: 'big_picture_order',
+                            name: 'big_picture_order'
+                        }, {
+                            xtype: 'textfield',
+                            fieldLabel: 'big_picture_label',
+                            labelWidth: 100,
+                            itemId: 'big_picture_label',
+                            name: 'big_picture_label'
+                        }, {
+                            xtype: 'textfield',
+                            fieldLabel: 'big_picture_color',
+                            labelWidth: 100,
+                            itemId: 'big_picture_color',
+                            name: 'big_picture_color'
+                        }, {
+                            xtype: 'textfield',
+                            fieldLabel: 'additional_relation',
+                            labelWidth: 100,
+                            itemId: 'additional_relation',
+                            name: 'additional_relation'
+                        }]
+                }]
             }, {
-                xtype: 'textfield',
-                fieldLabel: 'prefix',
-                labelWidth: 100,
-                itemId: 'prefix',
-                name: 'prefix'
-            }, {
-                xtype: 'textfield',
-                fieldLabel: 'tag',
-                labelWidth: 100,
-                itemId: 'tag',
-                name: 'tag'
-            }, {
-                xtype: 'textfield',
-                fieldLabel: 'color',
-                labelWidth: 100,
-                itemId: 'color',
-                name: 'color'
-            }, {
-                xtype: 'numberfield',
-                fieldLabel: 'big_picture_order',
-                labelWidth: 100,
-                itemId: 'big_picture_order',
-                name: 'big_picture_order'
-            }, {
-                xtype: 'textfield',
-                fieldLabel: 'big_picture_label',
-                labelWidth: 100,
-                itemId: 'big_picture_label',
-                name: 'big_picture_label'
-            }, {
-                xtype: 'textfield',
-                fieldLabel: 'big_picture_color',
-                labelWidth: 100,
-                itemId: 'big_picture_color',
-                name: 'big_picture_color'
-            }, {
-                xtype: 'textfield',
-                fieldLabel: 'additional_relation',
-                labelWidth: 100,
-                itemId: 'additional_relation',
-                name: 'additional_relation'
+                xtype: 'box',
+                getValue: function() {
+                    return this.value;
+                },
+                setValue: function(value) {
+                    this.value = value;
+                    for (var child of value) {
+                        const newItem = subsection(null);
+                        panel.add(newItem);
+                        for (var key in child) {
+                            const field = newItem.queryBy( (x) => x.name === key)[0];
+                            field.setValue(child[key]);
+                        }
+                        panel.doLayout();
+                    }
+                },
+                name: 'children'
             }, id === 'hosted' ? {
                 xtype: 'container',
                 layout : {
                     type: 'hbox',
                     align: 'stretch'
                 },
-                height: 20,
+                height: 40,
                 items: [{
                     xtype: 'box',
-                    width: 100
+                    width: 115
                 }, {
                     xtype: 'button',
                     text: 'Add hosted project',
                     handler: function() {
-                        panel.add(subsection());
+                        panel.add(subsection(null));
                         panel.doLayout();
+                    },
+                    height: 20,
+                    margin: '10 0'
+                }]
+            } : id === null ? {
+                xtype: 'container',
+                layout : {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                height: 30,
+                items: [{
+                    xtype: 'box',
+                    flex: 1
+                }, {
+                    xtype: 'button',
+                    text: 'DELETE',
+                    style: {
+                        color: 'red'
+                    },
+                    margin: '0 10 10 0',
+                    handler: function() {
+                        panel.ownerCt.remove(panel);
                     },
                     height: 20
                 }]
+
+
             } : { xtype: 'box'}]
         });
 
@@ -906,19 +1026,44 @@ function getSettingsYmlEditor() {
 
     const editorRelation = new Ext.Panel({
         title: 'settings.yml relation:',
+        frame: true,
         section: 'relation',
-        ...defaultEditorSettings,
+        layout: {
+            type: 'vbox',
+            align: 'stretch'
+        },
         items: [{
-            xtype: 'textfield',
-            fieldLabel: 'label',
-            name: 'label',
-            description: 'How do we label this relation?'
+            ...defaultEditorSettings,
+            xtype: 'container',
+            items: [{
+                xtype: 'textfield',
+                fieldLabel: 'label',
+                name: 'label',
+                description: 'How do we label this relation?'
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'url',
+                name: 'url',
+                description: 'How do we name this relation in the search part of the url?'
+            }]
         }, {
-            xtype: 'textfield',
-            fieldLabel: 'url',
-            name: 'url',
-            description: 'How do we name this relation in the search part of the url?'
-        }, subsection('hosted'), subsection('company'), subsection('member'), subsection('false')]
+            xtype: 'container',
+            items: [subsection('hosted'), subsection('company'), subsection('member'), subsection(false)],
+            name: 'values',
+            setValue: function(v) {
+                console.info('Set values: ', v);
+                for (let entry of v) {
+                    const form = this.queryBy( (x) => x.memberId === entry.id)[0];
+                    for (let key in entry) {
+                        const field = form.queryBy( (x) => x.name === key)[0];
+                        field.setValue(entry[key]);
+                    }
+                }
+            },
+            getValue: function() {
+
+            }
+        }]
     });
 
     const editor = new Ext.Container({
@@ -1019,7 +1164,7 @@ function getSettingsYmlEditor() {
                         }
                         return target;
                     })();
-                    if (!ignore) {
+                    if (!ignore && Ext.isDefined(value)) {
                         field.setValue(value);
                     }
                 }
@@ -1792,6 +1937,7 @@ function getLandscapeYmlEditor() {
 
     const previewSelectedItem = async function(options = {}) {
         const selectedItem = sm.getSelection()[0];
+        const iframe = document.querySelector('#grid-preview iframe');
         if (!selectedItem) {
             iframe.src = '';
             return;
@@ -1809,7 +1955,6 @@ function getLandscapeYmlEditor() {
             }
         });
         const itemInfo = await response.json();
-        const iframe = document.querySelector('#grid-preview iframe');
         if (itemInfo.id) {
             if (!options.forceReload && iframe.contentWindow.landscapeRouter) {
                 iframe.contentWindow.landscapeRouter.push(`?selected=${itemInfo.id}`);
@@ -2348,8 +2493,8 @@ async function getMainPanel() {
             overflow: 'visible',
             position: 'absolute',
             'z-index': 1,
-            left: '500px',
-            width: 'calc(100% - 400px)',
+            left: '460px',
+            width: 'calc(100% - 460px)',
             color: 'white',
             top: '-2px'
         },
@@ -2364,8 +2509,8 @@ async function getMainPanel() {
             xtype: 'box',
             autoEl: {
                 style: {
-                    padding: 10,
-                    fontSize: 16
+                    margin: '10px',
+                    fontSize: '14px'
                 },
                 cn: `Connected to ${activeBackend.getDescription()}`
             }
