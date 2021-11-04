@@ -1957,9 +1957,9 @@ function getLandscapeYmlEditor() {
         const itemInfo = await response.json();
         if (itemInfo.id) {
             if (!options.forceReload && iframe.contentWindow.landscapeRouter) {
-                iframe.contentWindow.landscapeRouter.push(`?selected=${itemInfo.id}`);
+                iframe.contentWindow.landscapeRouter.push(`/card-mode?selected=${itemInfo.id}`);
             } else {
-                iframe.src = `/landscape?selected=${itemInfo.id}&style="body{zoom:0.7}"`;
+                iframe.src = `/landscape/card-mode.html?selected=${itemInfo.id}&style="body{zoom:0.7}"`;
             }
         } else {
             iframe.src = '';
