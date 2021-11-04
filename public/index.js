@@ -2103,7 +2103,18 @@ function getCategoriesEditor() {
 Here you can add, rename and delete categories and subcategores.  Double click on category or subcategory to change the name.
 Click once to select a row, then choose a 'Delete' button to delete an item or 'New' to add one
 After adding a new category or subcategory - close this modal window and add at least one item to the new category/subcategory
-              </pre> `
+              </pre> `,
+            items: [{
+                xtype: 'button',
+                text: 'X',
+                style: {
+                    position: 'absolute',
+                    right: '5px'
+                },
+                handler: function() {
+                    panel.ownerCt.close();
+                }
+            }]
         }, {
             region: 'center',
             xtype: 'container',
@@ -2112,7 +2123,7 @@ After adding a new category or subcategory - close this modal window and add at 
                 align: 'stretch'
             },
             items: [{
-                width: 480,
+                width: 500,
                 xtype: 'grid',
                 tbar: [{
                     xtype: 'button',
@@ -2148,7 +2159,7 @@ After adding a new category or subcategory - close this modal window and add at 
                     fields: ['id', 'name', 'children']
                 })
             }, { xtype: 'box', width: 10 }, {
-                width: 480,
+                width: 500,
                 xtype: 'grid',
                 tbar: [{
                     xtype: 'button',
