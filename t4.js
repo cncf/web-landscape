@@ -1,4 +1,6 @@
 const client = require('@octokit/core').Octokit;
+const octokit = new client({});
+
 async function main() {
     const owner = 'lfai';
     const repo = 'lfai-landscape';
