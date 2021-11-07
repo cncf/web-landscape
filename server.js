@@ -150,6 +150,24 @@ async function updatePreview({socketId, dir, name}) {
     await fs.copyFile(srcFile, dstFile);
 }
 
+async function getPullRequest({req, res}) {
+    const repo = req.body.repo;
+    const branch = `web-landscape-${req.body.branch}`;
+
+    const client = require('@octokit/core').Octokit;
+    const octokit = new client({
+        auth: (process.env.GITHUB_KEY || '').split(',')[0]
+    });
+
+    const response = await octokit.request(`GET /repos/${repo}/pulls`);
+
+    const baseBranches = response.data.map( (x) => ({ url: x.html_url, branch: x.head.ref }));
+
+    const myBranch = baseBranches.filter( (x) => x.branch === branch)[0];
+    return myBranch;
+
+}
+
 app.post('/api/connect', async function(req, res) {
 
     const repoFolder = req.body.repo.replace('/', '-');
@@ -172,6 +190,10 @@ app.post('/api/connect', async function(req, res) {
         await fs.mkdir(tmpPath, { recursive: true});
 
         const defaultBranch = (await exec(`cd tmp-landscapes/${repoFolder} && git rev-parse --abbrev-ref HEAD`)).stdout.trim();
+
+        const pullRequest = await getPullRequest({req, res});
+        const createPullRequest = `https://github.com/${req.body.repo}/compare/${defaultBranch}...${branch}`;
+        // check if there is a pull request for a given branch;
 
         clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: `default branch is ${defaultBranch}\n`}));
         const cmd = ` git clone ../../../tmp-landscapes/${repoFolder} . && \
@@ -197,7 +219,7 @@ app.post('/api/connect', async function(req, res) {
                 await initializePreview(socketId);
             }
             clientSocket.send(JSON.stringify({type: 'finish', target: 'connect', code }));
-            res.json({success: true, pid: pid.pid});
+            res.json({success: true, pid: pid.pid, pr: (pullRequest || {}).url, createPr: createPullRequest});
         });
     }
 

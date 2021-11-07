@@ -464,8 +464,9 @@ function getInitialForm() {
         const repo = githubSelector.down('[name=repo]').getValue();
         const branch = githubSelector.down('[name=branch]').getValue();
 
+        let pr, createPr;
         try {
-            await fetch('api/connect', {
+            const response = await fetch('api/connect', {
                 body: JSON.stringify({
                     socketId: window.socketId,
                     repo,
@@ -477,6 +478,9 @@ function getInitialForm() {
                     'Content-Type': 'application/json' 
                 }
             });
+            const result = await response.json();
+            pr = result.pr;
+            createPr = result.createPr;
         } catch(ex) {
             initialForm.down('#progress').hide();
             initialForm.down('#githubPanel').enable();
@@ -487,6 +491,8 @@ function getInitialForm() {
         window.activeBackend = remoteBackend;
         window.activeBackend.repo = repo;
         window.activeBackend.branch = branch;
+        window.activeBackend.pr = pr;
+        window.activeBackend.createPr = createPr;
 
         openMainApp();
 
@@ -2528,15 +2534,25 @@ async function getMainPanel() {
         }, {
             itemId: 'pullrequest',
             xtype: 'button',
-            scale: 'medium',
-            text: 'Create a Pull Request',
+            text: 'Create a pull request',
             handler: function() {
-                window.open(this.urlLink, '_blank').focus();
-                this.hide();
+                window.open(window.activeBackend.createPr, '_blank').focus();
             },
             style: {
-                background: 'red'
-            }
+                'margin-top': '4px'
+            },
+            hidden: !!activeBackend.pr
+        }, {
+            itemId: 'view-pr',
+            xtype: 'button',
+            text: 'Open the pull request',
+            handler: function() {
+                window.open(window.activeBackend.pr, '_blank').focus();
+            },
+            style: {
+                'margin-top': '4px'
+            },
+            hidden: !activeBackend.pr
         }]
     });
 
@@ -2583,23 +2599,7 @@ async function getMainPanel() {
         }]
     });
 
-    statusBar.down('#pullrequest').hide();
-
-    Ext.globalEvents.on('message', function(data) {
-        const match = data.text.match(/https:\/\/github.com(.*?)\/pull\/new\/(\S+)/);
-        if (match && match[0]) {
-            const url = match[0];
-            statusBar.down('#pullrequest').show();
-            statusBar.down('#pullrequest').el.highlight();
-            statusBar.down('#pullrequest').urlLink = url;
-        }
-    });
-
-
-
-
     return mainPanel;
-
 }
 
 async function openMainApp() {
