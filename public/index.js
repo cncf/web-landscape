@@ -656,6 +656,12 @@ async function savePreview(store) {
     await activeBackend.writePreview({name: 'landscape.yml', content: yml });
 }
 
+async function saveSettings(values) {
+    const yml = yaml2json(values);
+    await activeBackend.writePreview({name: 'settings.yml', content: yml });
+    await activeBackend.writeFile({name: 'settings.yml', content: yml });
+}
+
 function getSettingsYmlEditor() {
 
     const defaultEditorSettings = {
@@ -860,6 +866,19 @@ function getSettingsYmlEditor() {
         }]
     });
 
+    const editorValidator = new Ext.Panel({
+        title: 'settings.yml validator:',
+        section: 'validator',
+        ...defaultEditorSettings,
+        frame: true,
+        items: [{
+            xtype: 'textarea',
+            fieldLabel: 'validator',
+            name: '.',
+            description: `A javascript code which will validate every field in the <b>extra</b> section of a landscape item. The code works with only 3 variables: <b>field</b>, <b>value</b> and <b>error</b>, for example: <pre> if(field === "my_demo_field" && value === "my_demo_value") { error = "Wrong my_demo_field ! "}  </pre>`,
+        }]
+    });
+
     const subsection = function(id) {
         const hostedDescription = `This is a section for a hosted project. Here you can specify how you name your hosted project and make children like incubated, graduated or similar ids`;
         const idNames = {
@@ -900,7 +919,12 @@ function getSettingsYmlEditor() {
                         readOnly: id !== null,
                         disabled: id !== null,
                         labelWidth: 100,
-                        name: 'id'
+                        name: 'id',
+                        value: id,
+                        getValue: function(x) {
+                            const value = Ext.form.field.Text.prototype.getValue.apply(this, arguments);
+                            return value === 'false' ? false : value;
+                        }
                     }, {
                         xtype: 'textfield',
                         fieldLabel: 'label',
@@ -941,7 +965,11 @@ function getSettingsYmlEditor() {
                             fieldLabel: 'big_picture_order',
                             labelWidth: 100,
                             itemId: 'big_picture_order',
-                            name: 'big_picture_order'
+                            name: 'big_picture_order',
+                            getValue: function() {
+                                const result = Ext.form.field.Number.prototype.getValue.apply(this, arguments);
+                                return result === null ? '' : result;
+                            }
                         }, {
                             xtype: 'textfield',
                             fieldLabel: 'big_picture_label',
@@ -965,7 +993,13 @@ function getSettingsYmlEditor() {
             }, {
                 xtype: 'box',
                 getValue: function() {
-                    return this.value;
+                    const subpanels = panel.items.getRange().filter( (x) => !!x.ignoreAssignment);
+                    const result = subpanels.map( (x) => x.getValue());
+                    if (result.length === 0) {
+                        return '';
+                    } else {
+                        return result;
+                    }
                 },
                 setValue: function(value) {
                     this.value = value;
@@ -1024,7 +1058,27 @@ function getSettingsYmlEditor() {
                 }]
 
 
-            } : { xtype: 'box'}]
+            } : { xtype: 'box'}],
+            getValue: function() {
+                const result = {};
+                const fields = this.queryBy( (x) => !!x.name);
+                for (var field of fields) {
+                    const parent = field.up('[ignoreAssignment]');
+                    if (parent === this) {
+                        const value = field.getValue();
+                        if (value !== '') {
+                            result[field.name] = value;
+                        }
+                    }
+                }
+                if (Object.keys(result).length === 0) {
+                    return null;
+                }
+                if (Object.keys(result).length === 1 && Object.keys(result)[0] === 'id') {
+                    return null;
+                }
+                return result;
+            }
         });
 
         return panel;
@@ -1057,6 +1111,7 @@ function getSettingsYmlEditor() {
             items: [subsection('hosted'), subsection('company'), subsection('member'), subsection(false)],
             name: 'values',
             setValue: function(v) {
+                this.value = v;
                 console.info('Set values: ', v);
                 for (let entry of v) {
                     const form = this.queryBy( (x) => x.memberId === entry.id)[0];
@@ -1067,7 +1122,14 @@ function getSettingsYmlEditor() {
                 }
             },
             getValue: function() {
-
+                const sections = this.queryBy( (x) => Ext.isDefined(x.memberId));
+                const values = sections.map(function(section) {
+                    if (!section.up('[memberId]')) {
+                        const value = section.getValue();
+                        return value;
+                    }
+                }).filter( (x) => !!x);
+                return values;
             }
         }]
     });
@@ -1077,7 +1139,7 @@ function getSettingsYmlEditor() {
         style: {
             overflowY: 'auto'
         },
-        items: [editorGlobal, editorTwitter, editorRelation] 
+        items: [editorGlobal, editorTwitter, editorValidator, editorRelation] 
     });
 
     const descriptionPanel = new Ext.Panel({
@@ -1110,7 +1172,12 @@ function getSettingsYmlEditor() {
             margins: 10,
             xtype: 'button',
             scale: 'medium',
-            text: 'Save settings.yml'
+            text: 'Save settings.yml',
+            handler: async function() {
+                const values = mainContainer.getValues();
+                console.info('Values: ', values);
+                await saveSettings(values);
+            }
         }, {
             xtype: 'box',
             flex: 1
@@ -1124,7 +1191,58 @@ function getSettingsYmlEditor() {
         }]
     });
 
+    const getValues = function() {
+        const sections = mainContainer.queryBy( (x) => !!x.section);
+        const copy = JSON.parse(JSON.stringify(this.data.settings));
+
+        for (var sectionContainer of sections) {
+            let result = copy[sectionContainer.section] || {};
+            const fields = sectionContainer.queryBy( (x) => !!x.name);
+            for (var field of fields) {
+                const ignore = field.up('[ignoreAssignment]');
+                const value = field.getValue();
+                if (field.name === '.') {
+                    result = field.getValue()
+                } else if (!ignore) {
+                    const parts = field.name.split('.');
+                    if (parts.length === 2) {
+                        result[parts[0]] = result[parts[0]] || {};
+                        if (value !== '') {
+                            result[parts[0]][parts[1]] = value;
+                        } else {
+                            delete result[parts[0]][parts[1]];
+                        }
+                    } else {
+                        if (value !== '') {
+                            result[field.name] = value;
+                        } else {
+                            delete result[field.name];
+                        }
+                    }
+                }
+            }
+
+            // remove empty {} fields
+            if (Ext.isObject(result)) {
+                for (var k in result) {
+                    if (JSON.stringify(result[k]) === '{}') {
+                        delete result[k];
+                    }
+                }
+            }
+
+            if (result === '') {
+                delete copy[sectionContainer.section];
+            } else {
+                copy[sectionContainer.section] = result;
+            }
+        }
+
+        return copy;
+    }
+
     const mainContainer = new Ext.Container({
+        itemId: 'settings',
         layout: 'border',
         items: [{
             region: 'center',
@@ -1166,7 +1284,9 @@ function getSettingsYmlEditor() {
                     const value = (function() {
                         let target = settings;
                         for (var part of path) {
-                            target = (target || {})[part];
+                            if (part !== '') {
+                                target = (target || {})[part];
+                            }
                         }
                         return target;
                     })();
@@ -1175,8 +1295,10 @@ function getSettingsYmlEditor() {
                     }
                 }
             }
-        }
+        },
+        getValues: getValues
     });
+
 
     return mainContainer;
 }
