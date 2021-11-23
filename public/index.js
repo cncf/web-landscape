@@ -171,6 +171,24 @@ async function getChangedFiles(lastSnapshot) {
     return Object.values(files).concat(removedFiles);
 }
 
+const yesNoComboboxOptions = {
+                xtype: 'combo',
+                displayField: 'name',
+                valueField: 'id',
+                width: 120,
+                store: new Ext.data.JsonStore({
+                    fields: ['id', 'name'],
+                    data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
+                }),
+                editable: false,
+                value: '',
+                queryMode: 'local',
+                selectOnFocus: false,
+                triggerAction: 'all',
+                autoSelect: true,
+                forceSelection: true
+};
+
 function getGithubSelector() {
 
     function generateBranchName() {
@@ -735,39 +753,13 @@ function getSettingsYmlEditor() {
             name: 'skip_funding',
             description: `Set to true when you do not need a funding page. You may need this for a private repo too`,
 
-            xtype: 'combo',
-            displayField: 'name',
-            valueField: 'id',
-            store: new Ext.data.JsonStore({
-                fields: ['id', 'name'],
-                data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
-            }),
-            editable: false,
-            value: '',
-            queryMode: 'local',
-            selectOnFocus: false,
-            triggerAction: 'all',
+            ...yesNoComboboxOptions
         }, {
             fieldLabel: 'skip_crunchbase',
             name: 'skip_crunchbase',
             description: `Set to true if you don't want this project to use crunchbase at all. In landscape.yml items will use <b> organization</b> field instead of the <b>crunchbase</b> field`,
 
-            xtype: 'combo',
-            displayField: 'name',
-            valueField: 'id',
-            store: new Ext.data.JsonStore({
-                fields: ['id', 'name'],
-                data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
-            }),
-            editable: false,
-            value: '',
-            queryMode: 'local',
-            selectOnFocus: false,
-            triggerAction: 'all',
-            initComponent: function() {
-                Ext.form.field.ComboBox.prototype.initComponent.apply(this, arguments);
-                this.setValue('');
-            }
+            ...yesNoComboboxOptions
         }, {
             xtype: 'textfield',
             fieldLabel: 'slack_channel',
@@ -929,12 +921,14 @@ function getSettingsYmlEditor() {
                         xtype: 'textfield',
                         fieldLabel: 'label',
                         labelWidth: 100,
-                        name: 'label'
+                        name: 'label',
+                        description: 'The text which appears in the select tag'
                     }, {
                         xtype: 'textfield',
                         fieldLabel: 'url',
                         labelWidth: 100,
-                        name: 'url'
+                        name: 'url',
+                        description: 'How that value is displayed in the browser url'
                     }, {
                         xtype: 'textfield',
                         fieldLabel: 'prefix',
@@ -1088,6 +1082,7 @@ function getSettingsYmlEditor() {
         title: 'settings.yml relation:',
         frame: true,
         section: 'relation',
+        margin: 10,
         layout: {
             type: 'vbox',
             align: 'stretch'
@@ -1134,12 +1129,185 @@ function getSettingsYmlEditor() {
         }]
     });
 
+    // key, name, label, funding, enduser, crunchbase_and_children, is_large, end_user_label
+    const membershipSection = function() {
+        const panel = new Ext.Panel({
+            isMembershipSection: true,
+            frame: true,
+            ignoreAssignment: true,
+            margin: 5,
+            layout : {
+                type: 'vbox',
+                align: 'stretch'
+            },
+            items: [{
+                xtype: 'container',
+                layout: {
+                    type: 'hbox'
+                },
+                items: [{
+                    ...defaultEditorSettings,
+                    xtype: 'container',
+                    layout: 'form',
+                    flex: 1,
+                    labelWidth: 200,
+                    items: [{
+                        xtype: 'textfield',
+                        name: 'key',
+                        fieldLabel: 'key',
+                        description: `Which member are we describing? Should be the exact subcategory name from the Member subcategories or 'cncf' or 'linux_foundation'`
+                    }, {
+                        xtype: 'textfield',
+                        name: 'name',
+                        fieldLabel: 'name'
+                    }, {
+                        xtype: 'textfield',
+                        name: 'label',
+                        fieldLabel: 'label'
+                    }, {
+                        xtype: 'textfield',
+                        name: 'funding',
+                        fieldLabel: 'funding'
+                    }]
+                }, {
+                    ...defaultEditorSettings,
+                    xtype: 'container',
+                    layout: 'form',
+                    flex: 1,
+                    labelWidth: 200,
+                    items: [{
+                        name: 'enduser',
+                        fieldLabel: 'enduser',
+                        description: 'This member is an enduser. CNCF specific field.',
+                        ...yesNoComboboxOptions
+                    }, {
+                        xtype: 'textfield',
+                        name: 'crunchbase_and_children',
+                        fieldLabel: 'crunchbase_and_children'
+                    }, {
+                        name: 'is_large',
+                        fieldLabel: 'is_large',
+                        description: 'Show as a big icon',
+                        ...yesNoComboboxOptions
+                    }, {
+                        xtype: 'textfield',
+                        name: 'end_user_label',
+                        fieldLabel: 'end_user_label'
+                    }]
+                }]
+            }, {
+                xtype: 'container',
+                layout : {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                height: 30,
+                items: [{
+                    xtype: 'box',
+                    flex: 1
+                }, {
+                    xtype: 'button',
+                    text: 'DELETE',
+                    style: {
+                        color: 'red'
+                    },
+                    margin: '0 10 10 0',
+                    handler: function() {
+                        panel.ownerCt.remove(panel);
+                    },
+                    height: 20
+                }]
+
+
+            }],
+            setValue: function(v) {
+                panel.value = v;
+                for (var key in v) {
+                    var value = v[key];
+                    const item = panel.queryBy( (x) => x.name === key)[0];
+                    item.setValue(value);
+                }
+            },
+            getValue: function() {
+                const value = panel.value || {};
+                const fields = panel.queryBy( (x) => !!x.name);
+                for (var field of fields) {
+                    if (field.getValue() === '') {
+                        delete value[field.name];
+                    } else {
+                        value[field.name] = field.getValue();
+                    }
+                }
+                return value;
+            }
+        });
+        return panel;
+    };
+
+    const editorMembership = new Ext.Panel({
+        title: 'settings.yml membership:',
+        frame: true,
+        section: 'membership',
+        margin: 10,
+        layout: {
+            type: 'vbox',
+            align: 'stretch'
+        },
+        items: [{
+            xtype: 'container',
+            ignoreAssignment: true,
+            name: '.',
+            layout : {
+                type: 'hbox',
+                align: 'stretch'
+            },
+            height: 40,
+            items: [{
+                xtype: 'box',
+                width: 115
+            }, {
+                xtype: 'button',
+                text: 'Add hosted project',
+                handler: function() {
+                    editorMembership.add(membershipSection());
+                    editorMembership.doLayout();
+                },
+                height: 20,
+                margin: '10 0'
+            }],
+            getValue: function() {
+                const sections = editorMembership.queryBy( (x) => !!x.isMembershipSection);
+                const result = {};
+                for (var section of sections) {
+                    const value = section.getValue();
+                    const key = value.key;
+                    delete value.key;
+                    result[key] = value;
+                }
+                return result;
+            },
+            setValue: function(v) {
+                this.value = v;
+                for (var k in v) {
+                    const item = {
+                        key: k,
+                        ...v[k]
+                    }
+                    const section = membershipSection();
+                    editorMembership.add(section);
+                    editorMembership.doLayout();
+                    section.setValue(item);
+                }
+            }
+        }]
+    });
+
     const editor = new Ext.Container({
         flex: 1,
         style: {
             overflowY: 'auto'
         },
-        items: [editorGlobal, editorTwitter, editorValidator, editorRelation] 
+        items: [editorGlobal, editorTwitter, editorValidator, editorRelation, editorMembership] 
     });
 
     const descriptionPanel = new Ext.Panel({
@@ -1152,15 +1320,20 @@ function getSettingsYmlEditor() {
     });
 
     editor.on('afterrender', function() {
-        const fields = editor.query('[name]');
-        for (var item of fields) {
-            const updateDescription = function(item) {
-                descriptionPanel.setTitle('Info: ' + item.name);
-                descriptionPanel.down('[xtype=box]').update(item.description || 'No description')
+        setInterval(function() {
+            const fields = editor.query('[name]');
+            for (var item of fields) {
+                if (!item.subscribedForDescription) {
+                    item.subscribedForDescription = true;
+                    const updateDescription = function(item) {
+                        descriptionPanel.setTitle('Info: ' + item.name);
+                        descriptionPanel.down('[xtype=box]').update(item.description || 'No description')
+                    }
+                    item.on('focus', updateDescription);
+                    item.on('mouseover', updateDescription);
+                }
             }
-            item.on('focus', updateDescription);
-            item.on('mouseover', updateDescription);
-        }
+        }, 1000);
     });
 
     const bottom = new Ext.ComponentMgr.create({
@@ -1831,24 +2004,10 @@ function getLandscapeYmlEditor() {
                 fieldLabel: 'Best practices',
                 description: 'When a project follows best practices at https://bestpractices.coreinfrastructure.org/en/projects, please provide a project github url here.'
             }, {
-                xtype: 'combo',
                 name:  'enduser',
                 fieldLabel: 'enduser',
                 description: `CNCF specific field. Allows to mark a certain entry as an end user`,
-                displayField: 'name',
-                valueField: 'id',
-                width: 120,
-                store: new Ext.data.JsonStore({
-                    fields: ['id', 'name'],
-                    data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
-                }),
-                editable: false,
-                value: '',
-                queryMode: 'local',
-                selectOnFocus: false,
-                triggerAction: 'all',
-                autoSelect: true,
-                forceSelection: true
+                ...yesNoComboboxOptions
             }, {
                 xtype: 'combo',
                 name: 'open_source',
@@ -1869,44 +2028,17 @@ function getLandscapeYmlEditor() {
                 autoSelect: true,
                 forceSelection: true
             }, {
-                xtype: 'combo',
                 name: 'allow_duplicate_repo',
                 fieldLabel: 'allow_duplicate_repo',
                 description: `Usually two different items can not have the same repo_url. Rarely different items refer to the same github repo, in this case both should be marked as <b>true</b>`,
-                displayField: 'name',
-                valueField: 'id',
-                width: 120,
-                store: new Ext.data.JsonStore({
-                    fields: ['id', 'name'],
-                    data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
-                }),
-                editable: false,
-                value: '',
-                queryMode: 'local',
-                selectOnFocus: false,
-                triggerAction: 'all',
-                autoSelect: true,
-                forceSelection: true
+                ...yesNoComboboxOptions
             }, {
                 xtype: 'combo',
                 name: 'unnamed_organization',
                 fieldLabel: 'unnamed_organization',
                 description: 'CNCF specific field to show a lack of organization. Choose <b>true</b> only in that case',
                 cncfOnly: true,
-                displayField: 'name',
-                valueField: 'id',
-                width: 120,
-                store: new Ext.data.JsonStore({
-                    fields: ['id', 'name'],
-                    data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
-                }),
-                editable: false,
-                value: '',
-                queryMode: 'local',
-                selectOnFocus: false,
-                triggerAction: 'all',
-                autoSelect: true,
-                forceSelection: true
+                ...yesNoComboboxOptions
             }, {
                 xtype: 'textfield',
                 name: 'organization',
