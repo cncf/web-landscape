@@ -674,9 +674,13 @@ async function savePreview(store) {
     await activeBackend.writePreview({name: 'landscape.yml', content: yml });
 }
 
-async function saveSettings(values) {
+async function saveSettingsPreview(values) {
     const yml = yaml2json(values);
     await activeBackend.writePreview({name: 'settings.yml', content: yml });
+}
+
+async function saveSettings(values) {
+    const yml = yaml2json(values);
     await activeBackend.writeFile({name: 'settings.yml', content: yml });
 }
 
@@ -1107,7 +1111,6 @@ function getSettingsYmlEditor() {
             name: 'values',
             setValue: function(v) {
                 this.value = v;
-                console.info('Set values: ', v);
                 for (let entry of v) {
                     const form = this.queryBy( (x) => x.memberId === entry.id)[0];
                     for (let key in entry) {
@@ -1302,12 +1305,34 @@ function getSettingsYmlEditor() {
         }]
     });
 
+    const editorHome = new Ext.Panel({
+        title: 'settings.yml twitter:',
+        section: 'home',
+        ...defaultEditorSettings,
+        frame: true,
+        items: [{
+            xtype: 'textarea',
+            grow: true,
+            height: 100,
+            fieldLabel: 'header',
+            name: 'header',
+            description: 'An html fragment which is displayed at the top of a landscape page'
+        }, {
+            xtype: 'textarea',
+            grow: true,
+            height: 100,
+            fieldLabel: 'footer',
+            name: 'footer',
+            description: 'An html fragment which is displayed at the bottom of a landscape page'
+        }]
+    });
+
     const editor = new Ext.Container({
         flex: 1,
         style: {
             overflowY: 'auto'
         },
-        items: [editorGlobal, editorTwitter, editorValidator, editorRelation, editorMembership] 
+        items: [editorGlobal, editorTwitter, editorValidator, editorRelation, editorMembership, editorHome] 
     });
 
     const descriptionPanel = new Ext.Panel({
@@ -1348,7 +1373,6 @@ function getSettingsYmlEditor() {
             text: 'Save settings.yml',
             handler: async function() {
                 const values = mainContainer.getValues();
-                console.info('Values: ', values);
                 await saveSettings(values);
             }
         }, {
@@ -1471,6 +1495,19 @@ function getSettingsYmlEditor() {
         },
         getValues: getValues
     });
+
+    setInterval(function() {
+        const values = mainContainer.getValues();
+        if (mainContainer.previousValues !== JSON.stringify(values)) {
+            mainContainer.previousValues = JSON.stringify(values);
+            // trigger a change
+            mainContainer.fireEvent('save-preview', values);
+        }
+    }, 1000);
+
+    mainContainer.on('save-preview', (values) => saveSettingsPreview(values), null, { buffer: 1000 });
+    
+
 
 
     return mainContainer;
