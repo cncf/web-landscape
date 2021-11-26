@@ -4,12 +4,13 @@ const isChrome = !!navigator.userAgent.match(/Chrome\/(\S+)/);
 const remoteBackend = {
     type: 'remote',
     getDescription: () => `${remoteBackend.repo}#${remoteBackend.branch}`,
-    readFile: async function({dir, name}) {
+    readFile: async function({dir, name, encoding}) {
         const content = await fetch(`/api/download-file`, {
             body: JSON.stringify({
                 socketId: window.socketId,
                 dir,
-                name
+                name,
+                encoding
             }),
             method: 'POST',
             headers: {
@@ -22,13 +23,14 @@ const remoteBackend = {
         return json.content;
     },
 
-    writeFile: async function({dir, name, content}) {
+    writeFile: async function({dir, name, content, encoding}) {
         await fetch(`/api/upload-file`, {
             body: JSON.stringify({
                 socketId: window.socketId,
                 dir,
                 content,
-                name
+                name,
+                encoding
             }),
             method: 'POST',
             headers: {
@@ -38,13 +40,14 @@ const remoteBackend = {
         });
     },
 
-    writePreview: async function({dir, name, content}) {
+    writePreview: async function({dir, name, content, encoding}) {
         await fetch(`/api/upload-file`, {
             body: JSON.stringify({
                 socketId: window.socketId,
                 dir,
                 content,
                 name,
+                encoding,
                 mode: 'preview'
             }),
             method: 'POST',
@@ -59,14 +62,14 @@ const remoteBackend = {
 const localBackend = {
     type: 'local',
     getDescription: () => `local folder`,
-    readFile: async function({dir, name}) {
+    readFile: async function({ dir, name, encoding }) {
         const dirHandle = dir ? await webFolder.getDirectoryHandle(dir) : webFolder;
         const handle = await dirHandle.getFileHandle(name);
         const fileObj = await handle.getFile();
         const landscapeYmlContent = await fileObj.text();
         return landscapeYmlContent;
     },
-    writeFile: async function({dir, name, content}) {
+    writeFile: async function({ dir, name, content, encoding }) {
         const dirHandle = dir ? await webFolder.getDirectoryHandle(dir) : webFolder;
         const handle = await dirHandle.getFileHandle(name, { create: true });
         const stream = await handle.createWritable();
@@ -74,7 +77,7 @@ const localBackend = {
         await stream.close();
         await remoteBackend.writePreview({dir, name, content});
     },
-    writePreview: async function({dir, name, content}) {
+    writePreview: async function({dir, name, content, encoding }) {
         await remoteBackend.writePreview({dir, name, content});
     }
 }
@@ -172,21 +175,21 @@ async function getChangedFiles(lastSnapshot) {
 }
 
 const yesNoComboboxOptions = {
-                xtype: 'combo',
-                displayField: 'name',
-                valueField: 'id',
-                width: 120,
-                store: new Ext.data.JsonStore({
-                    fields: ['id', 'name'],
-                    data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
-                }),
-                editable: false,
-                value: '',
-                queryMode: 'local',
-                selectOnFocus: false,
-                triggerAction: 'all',
-                autoSelect: true,
-                forceSelection: true
+    xtype: 'combo',
+    displayField: 'name',
+    valueField: 'id',
+    width: 120,
+    store: new Ext.data.JsonStore({
+        fields: ['id', 'name'],
+        data: [{id: '', name: 'Not set'}, {id: true, name: 'true' }]
+    }),
+    editable: false,
+    value: '',
+    queryMode: 'local',
+    selectOnFocus: false,
+    triggerAction: 'all',
+    autoSelect: true,
+    forceSelection: true
 };
 
 function getGithubSelector() {
@@ -711,7 +714,7 @@ function getSettingsYmlEditor() {
             fieldLabel: 'short_name',
             name: 'short_name',
             description: `
-            
+
             `
         }, {
             xtype: 'textfield',
@@ -947,46 +950,46 @@ function getSettingsYmlEditor() {
                         name: 'tag'
                     }]
                 }, {
-                        ...defaultEditorSettings,
-                        xtype: 'container',
-                        layout: 'form',
-                        flex: 1,
-                        labelWidth: 200,
-                        items: [{
-                            xtype: 'textfield',
-                            fieldLabel: 'color',
-                            labelWidth: 100,
-                            itemId: 'color',
-                            name: 'color'
-                        }, {
-                            xtype: 'numberfield',
-                            fieldLabel: 'big_picture_order',
-                            labelWidth: 100,
-                            itemId: 'big_picture_order',
-                            name: 'big_picture_order',
-                            getValue: function() {
-                                const result = Ext.form.field.Number.prototype.getValue.apply(this, arguments);
-                                return result === null ? '' : result;
-                            }
-                        }, {
-                            xtype: 'textfield',
-                            fieldLabel: 'big_picture_label',
-                            labelWidth: 100,
-                            itemId: 'big_picture_label',
-                            name: 'big_picture_label'
-                        }, {
-                            xtype: 'textfield',
-                            fieldLabel: 'big_picture_color',
-                            labelWidth: 100,
-                            itemId: 'big_picture_color',
-                            name: 'big_picture_color'
-                        }, {
-                            xtype: 'textfield',
-                            fieldLabel: 'additional_relation',
-                            labelWidth: 100,
-                            itemId: 'additional_relation',
-                            name: 'additional_relation'
-                        }]
+                    ...defaultEditorSettings,
+                    xtype: 'container',
+                    layout: 'form',
+                    flex: 1,
+                    labelWidth: 200,
+                    items: [{
+                        xtype: 'textfield',
+                        fieldLabel: 'color',
+                        labelWidth: 100,
+                        itemId: 'color',
+                        name: 'color'
+                    }, {
+                        xtype: 'numberfield',
+                        fieldLabel: 'big_picture_order',
+                        labelWidth: 100,
+                        itemId: 'big_picture_order',
+                        name: 'big_picture_order',
+                        getValue: function() {
+                            const result = Ext.form.field.Number.prototype.getValue.apply(this, arguments);
+                            return result === null ? '' : result;
+                        }
+                    }, {
+                        xtype: 'textfield',
+                        fieldLabel: 'big_picture_label',
+                        labelWidth: 100,
+                        itemId: 'big_picture_label',
+                        name: 'big_picture_label'
+                    }, {
+                        xtype: 'textfield',
+                        fieldLabel: 'big_picture_color',
+                        labelWidth: 100,
+                        itemId: 'big_picture_color',
+                        name: 'big_picture_color'
+                    }, {
+                        xtype: 'textfield',
+                        fieldLabel: 'additional_relation',
+                        labelWidth: 100,
+                        itemId: 'additional_relation',
+                        name: 'additional_relation'
+                    }]
                 }]
             }, {
                 xtype: 'box',
@@ -1270,7 +1273,7 @@ function getSettingsYmlEditor() {
                 width: 115
             }, {
                 xtype: 'button',
-                text: 'Add hosted project',
+                text: 'Add section',
                 handler: function() {
                     editorMembership.add(membershipSection());
                     editorMembership.doLayout();
@@ -1306,7 +1309,7 @@ function getSettingsYmlEditor() {
     });
 
     const editorHome = new Ext.Panel({
-        title: 'settings.yml twitter:',
+        title: 'settings.yml home:',
         section: 'home',
         ...defaultEditorSettings,
         frame: true,
@@ -1327,12 +1330,227 @@ function getSettingsYmlEditor() {
         }]
     });
 
+    const adsSection = function() {
+        const panel = new Ext.Panel({
+            isAdsSection: true,
+            ignoreAssignment: true,
+            frame: true,
+            margin: 5,
+            items: [{
+                xtype: 'container',
+                ...defaultEditorSettings,
+                items: [{
+                    xtype: 'textfield',
+                    fieldLabel: 'url',
+                    name: 'url',
+                    description: 'A full link to the event'
+                }, {
+                    xtype: 'textfield',
+                    fieldLabel: 'title',
+                    name: 'title',
+                    description: 'An event description'
+                }, {
+                    xtype: 'container',
+                    layout: 'absolute',
+                    height: 15,
+                    items: [{
+                        x: 110,
+                        y: 1,
+                        xtype: 'box',
+                        cls: 'x-form-item-label',
+                        html: `<i>/images/</i>`
+                    }]
+                }, {
+                    xtype: 'textfield',
+                    fieldLabel: 'image',
+                    name: 'image',
+                    description: `a file name in the images/ folder, can be of any image type. Please try to keep it easy like info1.jpg, info2.jpg and so on for every new ad`,
+                    setValue: function(v) {
+                        v = v ? v.replace('/images/', '') : v;
+                        Ext.form.field.Text.prototype.setValue.call(this, v);
+                    },
+                    getValue: function() {
+                        let v = Ext.form.field.Text.prototype.getValue.call(this);
+                        v = v.replace('/images/', '');
+                        return `/images/${v}`;
+                    }
+                }, {
+                    xtype: 'container',
+                    height: 90,
+                    layout: { type: 'absolute' },
+                    items: [{
+                        xtype: 'box',
+                        height: 90,
+                        x: 105,
+                        y: 0,
+                        isSettingsImg: true,
+                        autoEl: {
+                            tag: 'img',
+                            styles: { border: '1px solid green' }
+                        }
+                    }, {
+                        x: 295,
+                        y: 0,
+                        xtype: 'box',
+                        width: 100,
+                        height: 60,
+                        isUpload: true,
+                        autoEl: {
+                            tag: 'input',
+                            type: 'file',
+                            value: 'Choose a file to upload...'
+                        }
+                    }]
+                }]
+            }, {
+                xtype: 'container',
+                layout : {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                height: 30,
+                items: [{
+                    xtype: 'box',
+                    flex: 1
+                }, {
+                    xtype: 'button',
+                    text: 'DELETE',
+                    style: {
+                        color: 'red'
+                    },
+                    margin: '0 10 10 0',
+                    handler: function() {
+                        panel.ownerCt.remove(panel);
+                    },
+                    height: 20
+                }]
+            }],
+            setValue: function(v) {
+                panel.value = v;
+                for (var key in v) {
+                    var value = v[key];
+                    const item = panel.queryBy( (x) => x.name === key)[0];
+                    item.setValue(value);
+                }
+            },
+            getValue: function() {
+                const value = panel.value || {};
+                const fields = panel.queryBy( (x) => !!x.name);
+                for (var field of fields) {
+                    if (field.getValue() === '') {
+                        delete value[field.name];
+                    } else {
+                        value[field.name] = field.getValue();
+                    }
+                }
+                return value;
+            }
+        });
+
+        panel.on('afterrender', function() {
+
+            const updateLogo = async function() {
+                const img = panel.down(`[name=image]`).getValue();
+                if (img !== panel.previousImg) {
+                    panel.previousImg = img;
+                    const imgEl = panel.down('[isSettingsImg]').el.dom;
+                    // imgEl.src = "data:image/svg+xml;base64," + btoa('<svg></svg>');
+                    if (img) {
+                        try {
+                            const imgData = await activeBackend.readFile({encoding: 'base64', dir: 'images', name: img.split('/images/')[1]});
+                            imgEl.src= "data:image;base64," + imgData;
+                        } catch(ex) {
+                            imgEl.src = "";
+                        }
+                    } else {
+                        imgEl.src = "data:image/svg+xml;base64," + btoa('<svg></svg>');
+                    }
+                }
+            }
+
+            panel.down('[isUpload]').el.on('change', function(e, dom) {
+                const fileInfo = dom.files[0];
+                if (fileInfo) {
+                    let fileReader = new FileReader();
+                    fileReader.onload = async function(event) {
+                        const content = fileReader.result.split('base64,')[1];
+                        const fileName = panel.down(`[name=image]`).getValue().replace('/images/', '');
+                        panel.previousImg = -1; // to trigger the redraw
+                        dom.value = '';
+                        if (!fileName) {
+                            Ext.Msg.alert('Error', 'Please fill in the <b>image</b> field first with a name of the file');
+                        } else {
+                            await activeBackend.writeFile({dir: 'images', name: fileName, content: content, encoding: 'base64' });
+                        }
+                    };
+                    fileReader.readAsDataURL(fileInfo);
+                }
+            });
+
+            setInterval(function() {
+                updateLogo();
+
+            }, 1000);
+
+        });
+
+
+        return panel;
+    }
+
+    const editorAds = new Ext.Panel({
+        title: 'settings.yml ads:',
+        frame: true,
+        section: 'ads',
+        margin: 10,
+        layout: {
+            type: 'vbox',
+            align: 'stretch'
+        },
+        items: [{
+            xtype: 'container',
+            ignoreAssignment: true,
+            name: '.',
+            layout : {
+                type: 'hbox',
+                align: 'stretch'
+            },
+            height: 40,
+            items: [{
+                xtype: 'box',
+                width: 115
+            }, {
+                xtype: 'button',
+                text: 'Add section',
+                handler: function() {
+                    editorAds.add(adsSection());
+                    editorAds.doLayout();
+                },
+                height: 20,
+                margin: '10 0'
+            }],
+            getValue: function() {
+                const sections = editorAds.queryBy( (x) => !!x.isAdsSection);
+                return sections.map( (section) => section.getValue() );
+            },
+            setValue: function(v) {
+                this.value = v;
+                for (var k of v) {
+                    const section = adsSection();
+                    editorAds.add(section);
+                    editorAds.doLayout();
+                    section.setValue(k);
+                }
+            }
+        }]
+    });
+
     const editor = new Ext.Container({
         flex: 1,
         style: {
             overflowY: 'auto'
         },
-        items: [editorGlobal, editorTwitter, editorValidator, editorRelation, editorMembership, editorHome] 
+        items: [editorGlobal, editorTwitter, editorValidator, editorRelation, editorMembership, editorHome, editorAds] 
     });
 
     const descriptionPanel = new Ext.Panel({
@@ -1506,7 +1724,7 @@ function getSettingsYmlEditor() {
     }, 1000);
 
     mainContainer.on('save-preview', (values) => saveSettingsPreview(values), null, { buffer: 1000 });
-    
+
 
 
 
@@ -1750,7 +1968,7 @@ function getLandscapeYmlEditor() {
         assign('extra');
 
         // if (editor.focusedElement) {
-            // editor.focusedElement.focus();
+        // editor.focusedElement.focus();
         // }
 
         updateLogo();
@@ -2200,8 +2418,8 @@ function getLandscapeYmlEditor() {
                 align: 'stretch'
             },
             items: [editor, { xtype: 'box', height: 20 }, descriptionPanel]
-                // editor,
-                // descriptionPanel]
+            // editor,
+            // descriptionPanel]
         }],
         loadData: function(data) {
             if (data) {
@@ -2514,21 +2732,21 @@ After adding a new category or subcategory - close this modal window and add at 
                 // data is just records
                 // const categories = {};
                 // for (var item of data) {
-                    // if (!categories[item.get('category')]) {
-                        // categories[item.get('category')] = {
-                            // name: item.get('category'),
-                            // subcategories: {}
-                        // }
-                    // }
-                    // const category = categories[item.get('category')];
-                    // if (!category.subcategories[item.get('subcategory')]) {
-                        // category.subcategories[item.get('subcategory')] = {
-                            // name: item.get('subcategory'),
-                            // items: []
-                        // }
-                    // }
-                    // const subcategory = category.subcategories[item.get('subcategory')];
-                    // subcategory.items.push(item);
+                // if (!categories[item.get('category')]) {
+                // categories[item.get('category')] = {
+                // name: item.get('category'),
+                // subcategories: {}
+                // }
+                // }
+                // const category = categories[item.get('category')];
+                // if (!category.subcategories[item.get('subcategory')]) {
+                // category.subcategories[item.get('subcategory')] = {
+                // name: item.get('subcategory'),
+                // items: []
+                // }
+                // }
+                // const subcategory = category.subcategories[item.get('subcategory')];
+                // subcategory.items.push(item);
                 // }
 
                 storeCategories.loadData(data.landscape.map( (x) => ({ id: x.name, name: x.name, children: x.subcategories })));
@@ -2549,34 +2767,34 @@ After adding a new category or subcategory - close this modal window and add at 
     }
 
     panel.on('afterrender', function() {
-      const gridCategories = this.down('#categories');
-      const gridSubcategories = this.down('#subcategories');
+        const gridCategories = this.down('#categories');
+        const gridSubcategories = this.down('#subcategories');
 
-      gridCategories.getSelectionModel().on('selectionchange', handleSelectedCategory);
+        gridCategories.getSelectionModel().on('selectionchange', handleSelectedCategory);
 
-      gridCategories.store.on('update', (store, record) => {
-          if (gridCategories.ignoreUpdate) {
-              return;
-          }
-          const prevName = record.modified.name;
-          const newName = record.data.name;
-          panel.fireEvent('category-renamed', { from: prevName, to: newName });
-          gridCategories.ignoreUpdate = true;
-          record.commit();
-          gridCategories.ignoreUpdate = false;
-      });
-      gridSubcategories.store.on('update', (store, record) => {
-          if (gridSubcategories.ignoreUpdate) {
-              return;
-          }
-          const category = gridCategories.getSelectionModel().getSelection()[0].get('name');
-          const prevName = record.modified.name;
-          const newName = record.data.name;
-          panel.fireEvent('subcategory-renamed', { category, from: prevName, to: newName });
-          gridSubcategories.ignoreUpdate = true;
-          record.commit();
-          gridSubcategories.ignoreUpdate = false;
-      });
+        gridCategories.store.on('update', (store, record) => {
+            if (gridCategories.ignoreUpdate) {
+                return;
+            }
+            const prevName = record.modified.name;
+            const newName = record.data.name;
+            panel.fireEvent('category-renamed', { from: prevName, to: newName });
+            gridCategories.ignoreUpdate = true;
+            record.commit();
+            gridCategories.ignoreUpdate = false;
+        });
+        gridSubcategories.store.on('update', (store, record) => {
+            if (gridSubcategories.ignoreUpdate) {
+                return;
+            }
+            const category = gridCategories.getSelectionModel().getSelection()[0].get('name');
+            const prevName = record.modified.name;
+            const newName = record.data.name;
+            panel.fireEvent('subcategory-renamed', { category, from: prevName, to: newName });
+            gridSubcategories.ignoreUpdate = true;
+            record.commit();
+            gridSubcategories.ignoreUpdate = false;
+        });
 
     });
     return panel;

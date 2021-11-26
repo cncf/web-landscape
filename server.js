@@ -237,7 +237,7 @@ app.post('/api/download-file', async function(req, res) {
     const socketId = req.body.socketId;
     const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
     try {
-        const content = await fs.readFile(path.resolve(tmpPath, req.body.dir || '', req.body.name), 'utf-8');
+        const content = await fs.readFile(path.resolve(tmpPath, req.body.dir || '', req.body.name), req.body.encoding === 'base64' ? 'base64' : 'utf-8');
         res.json({success: true, content: content });
     } catch(ex) {
         res.json({success: false, content: '' });
@@ -253,8 +253,10 @@ app.post('/api/upload-file', async function(req, res) {
     const targetPath = isPreview ? previewPath : tmpPath;
 
     try {
-        await fs.writeFile(path.resolve(targetPath, req.body.dir || '', req.body.name), req.body.content);
+        const content = req.body.encoding === 'base64' ? Buffer.from(req.body.content, 'base64') : req.body.content;
+        await fs.writeFile(path.resolve(targetPath, req.body.dir || '', req.body.name), content);
     } catch(ex) {
+        console.info(ex.message);
         res.status(404);
         res.end('failed');
         return;
