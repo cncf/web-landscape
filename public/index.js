@@ -1857,12 +1857,37 @@ function getSettingsYmlEditor() {
         }]
     });
 
+    const editorTest = new Ext.Panel({
+        title: 'settings.yml test:',
+        section: 'test',
+        ...defaultEditorSettings,
+        frame: true,
+        items: [{
+            xtype: 'textfield',
+            fieldLabel: 'header',
+            name: 'header',
+            description: 'Which text needs to be tested for a presence on every page'
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'section',
+            name: 'section',
+            description: 'Which sections should be present on a /cards tab'
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'logo',
+            name: 'logo',
+            description: 'Which logo should be present on in the section of a /cards tab'
+        }]
+    });
+
+
+
     const editor = new Ext.Container({
         flex: 1,
         style: {
             overflowY: 'auto'
         },
-        items: [editorGlobal, editorTwitter, editorValidator, editorRelation, editorMembership, editorHome, editorAds, editorPresets, editorPrerender, editorExport] 
+        items: [editorGlobal, editorTwitter, editorValidator, editorRelation, editorMembership, editorHome, editorAds, editorPresets, editorPrerender, editorExport, editorTest] 
     });
 
     const descriptionPanel = new Ext.Panel({
