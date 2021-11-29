@@ -1,5 +1,3 @@
-// a remote backend is used when we checkout a branch on a server
-// n
 const isChrome = !!navigator.userAgent.match(/Chrome\/(\S+)/);
 const remoteBackend = {
     type: 'remote',
@@ -126,52 +124,6 @@ async function collectAllFiles() {
         }
     }));
     return files;
-}
-
-// 
-async function getChangedFiles(lastSnapshot) {
-    const files = {};
-    const existingFiles = {}; // to mark deleted files
-    const landscapeFiles = ['settings.yml', 'landscape.yml', 'processed_landscape.yml'];
-    const landscapeFolders = ['images', 'cached_logos', 'hosted_logos'];
-
-    for (var file of landscapeFiles) {
-        const handle = await webFolder.getFileHandle(file);
-        const fileObj = await handle.getFile();
-        const existingEntry = (lastSnapshot[file] || {});
-        existingFiles[file] = true;
-        if (existingEntry.lastModified !== fileObj.lastModified) {
-            const content = await fileObj.text();
-            files[file] = {
-                file,
-                content,
-                lastModified: fileObj.lastModified
-            }
-        }
-    }
-
-    for (var folder of landscapeFolders) {
-        const dirHandle = await webFolder.getDirectoryHandle(folder);
-        for await (const entry of dirHandle.values()) {
-            const file = entry.name;
-            const handle = await dirHandle.getFileHandle(file);
-            const fileObj = await handle.getFile();
-            const existingEntry = (lastSnapshot[`${folder}/${file}`] || {});
-            existingFiles[`${folder}/${file}`] = true;
-            if (existingEntry.lastModified !== fileObj.lastModified) {
-                const content = await fileObj.text();
-                files[`${folder}/${file}`] = {
-                    file: `${folder}/${file}`,
-                    content,
-                    lastModified: fileObj.lastModified
-                };
-            }
-        }
-    }
-
-    const removedFiles = Object.values(lastSnapshot).filter( (entry) => !existingFiles[entry.file] ).map( (entry) => ({ file: entry.file, isDeleted: true}));
-
-    return Object.values(files).concat(removedFiles);
 }
 
 const yesNoComboboxOptions = {
@@ -1545,12 +1497,372 @@ function getSettingsYmlEditor() {
         }]
     });
 
+    const presetsSection = function() {
+        const panel = new Ext.Panel({
+            isSection: true,
+            ignoreAssignment: true,
+            frame: true,
+            margin: 5,
+            items: [{
+                xtype: 'container',
+                ...defaultEditorSettings,
+                items: [{
+                    xtype: 'textfield',
+                    fieldLabel: 'url',
+                    name: 'url',
+                    description: 'A relative url with search parameters, for example, <i>/license=open-source</i>'
+                }, {
+                    xtype: 'textfield',
+                    fieldLabel: 'label',
+                    name: 'label',
+                    description: 'How it is appeared in a landscape'
+                }]
+            }, {
+                xtype: 'container',
+                layout : {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                height: 30,
+                items: [{
+                    xtype: 'box',
+                    flex: 1
+                }, {
+                    xtype: 'button',
+                    text: 'DELETE',
+                    style: {
+                        color: 'red'
+                    },
+                    margin: '0 10 10 0',
+                    handler: function() {
+                        panel.ownerCt.remove(panel);
+                    },
+                    height: 20
+                }]
+            }],
+            setValue: function(v) {
+                panel.value = v;
+                for (var key in v) {
+                    var value = v[key];
+                    const item = panel.queryBy( (x) => x.name === key)[0];
+                    item.setValue(value);
+                }
+            },
+            getValue: function() {
+                const value = panel.value || {};
+                const fields = panel.queryBy( (x) => !!x.name);
+                for (var field of fields) {
+                    if (field.getValue() === '') {
+                        delete value[field.name];
+                    } else {
+                        value[field.name] = field.getValue();
+                    }
+                }
+                return value;
+            }
+        });
+        return panel;
+    };
+
+    const editorPresets = new Ext.Panel({
+        title: 'settings.yml presets:',
+        frame: true,
+        section: 'presets',
+        margin: 10,
+        layout: {
+            type: 'vbox',
+            align: 'stretch'
+        },
+        items: [{
+            xtype: 'container',
+            ignoreAssignment: true,
+            name: '.',
+            layout : {
+                type: 'hbox',
+                align: 'stretch'
+            },
+            height: 40,
+            items: [{
+                xtype: 'box',
+                width: 115
+            }, {
+                xtype: 'button',
+                text: 'Add section',
+                handler: function() {
+                    editorPresets.add(presetsSection());
+                    editorPresets.doLayout();
+                },
+                height: 20,
+                margin: '10 0'
+            }],
+            getValue: function() {
+                const sections = editorPresets.queryBy( (x) => !!x.isSection);
+                return sections.map( (section) => section.getValue() );
+            },
+            setValue: function(v) {
+                this.value = v;
+                for (var k of v) {
+                    const section = presetsSection();
+                    editorPresets.add(section);
+                    editorPresets.doLayout();
+                    section.setValue(k);
+                }
+            }
+        }]
+    });
+
+    const prerenderSection = function() {
+        const panel = new Ext.Panel({
+            isSection: true,
+            ignoreAssignment: true,
+            frame: true,
+            margin: 5,
+            items: [{
+                xtype: 'container',
+                ...defaultEditorSettings,
+                items: [{
+                    xtype: 'textfield',
+                    fieldLabel: 'name',
+                    name: 'name',
+                    description: 'How will we call this page. It will be accessible as /pages/[name], for example, if you call it <i>members</i>, it will be accessible as <i>/pages/members</i>'
+                }, {
+                    xtype: 'textfield',
+                    fieldLabel: 'label',
+                    name: 'url',
+                    description: 'The search parameters of the page. For example, <i>/card-mode?category=open-mainframe-project-member-company&grouping=category&embed=yes&style=borderless</i>'
+                }]
+            }, {
+                xtype: 'container',
+                layout : {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                height: 30,
+                items: [{
+                    xtype: 'box',
+                    flex: 1
+                }, {
+                    xtype: 'button',
+                    text: 'DELETE',
+                    style: {
+                        color: 'red'
+                    },
+                    margin: '0 10 10 0',
+                    handler: function() {
+                        panel.ownerCt.remove(panel);
+                    },
+                    height: 20
+                }]
+            }],
+            setValue: function(v) {
+                panel.value = v;
+                for (var key in v) {
+                    var value = v[key];
+                    const item = panel.queryBy( (x) => x.name === key)[0];
+                    item.setValue(value);
+                }
+            },
+            getValue: function() {
+                const value = panel.value || {};
+                const fields = panel.queryBy( (x) => !!x.name);
+                for (var field of fields) {
+                    if (field.getValue() === '') {
+                        delete value[field.name];
+                    } else {
+                        value[field.name] = field.getValue();
+                    }
+                }
+                return value;
+            }
+        });
+        return panel;
+    };
+
+    const editorPrerender = new Ext.Panel({
+        title: 'settings.yml prerender:',
+        frame: true,
+        section: 'prerender',
+        margin: 10,
+        layout: {
+            type: 'vbox',
+            align: 'stretch'
+        },
+        items: [{
+              xtype: 'box',
+              margin: 5,
+              html: `This is a prerender section. It allows you to specify which pages with given filters and options you want to prerender, this way a page is rendered as html and can be displayed significantly faster`
+            },{
+            xtype: 'container',
+            ignoreAssignment: true,
+            name: '.',
+            layout : {
+                type: 'hbox',
+                align: 'stretch'
+            },
+            height: 40,
+            items: [{
+                xtype: 'box',
+                width: 115
+            }, {
+                xtype: 'button',
+                text: 'Add section',
+                handler: function() {
+                    editorPrerender.add(prerenderSection());
+                    editorPrerender.doLayout();
+                },
+                height: 20,
+                margin: '10 0'
+            }],
+            getValue: function() {
+                const sections = editorPrerender.queryBy( (x) => !!x.isSection);
+                const values = sections.map( (section) => section.getValue() );
+                const result = {};
+                for (var v of values) {
+                    result[v.name] = v.url;
+                }
+                return result;
+            },
+            setValue: function(v) {
+                this.value = v;
+                for (var k in v) {
+                    const section = prerenderSection();
+                    editorPrerender.add(section);
+                    editorPrerender.doLayout();
+                    section.setValue({ name: k, url: v[k] });
+                }
+            }
+        }]
+    });
+
+    const exportSection = function() {
+        const panel = new Ext.Panel({
+            isSection: true,
+            ignoreAssignment: true,
+            frame: true,
+            margin: 5,
+            items: [{
+                xtype: 'container',
+                ...defaultEditorSettings,
+                items: [{
+                    xtype: 'textfield',
+                    fieldLabel: 'name',
+                    name: 'name',
+                    description: 'How will we call this page. It will be accessible as /data/exports/[name].json, for example, if you call it <i>members</i>, it will be accessible as <i>/data/exports/members.json</i>'
+                }, {
+                    xtype: 'textfield',
+                    fieldLabel: 'label',
+                    name: 'url',
+                    description: 'The search parameters of the page. For example, <i>/card-mode?category=open-mainframe-project-member-company&grouping=category&embed=yes&style=borderless</i>'
+                }]
+            }, {
+                xtype: 'container',
+                layout : {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                height: 30,
+                items: [{
+                    xtype: 'box',
+                    flex: 1
+                }, {
+                    xtype: 'button',
+                    text: 'DELETE',
+                    style: {
+                        color: 'red'
+                    },
+                    margin: '0 10 10 0',
+                    handler: function() {
+                        panel.ownerCt.remove(panel);
+                    },
+                    height: 20
+                }]
+            }],
+            setValue: function(v) {
+                panel.value = v;
+                for (var key in v) {
+                    var value = v[key];
+                    const item = panel.queryBy( (x) => x.name === key)[0];
+                    item.setValue(value);
+                }
+            },
+            getValue: function() {
+                const value = panel.value || {};
+                const fields = panel.queryBy( (x) => !!x.name);
+                for (var field of fields) {
+                    if (field.getValue() === '') {
+                        delete value[field.name];
+                    } else {
+                        value[field.name] = field.getValue();
+                    }
+                }
+                return value;
+            }
+        });
+        return panel;
+    };
+
+    const editorExport = new Ext.Panel({
+        title: 'settings.yml export:',
+        frame: true,
+        section: 'export',
+        margin: 10,
+        layout: {
+            type: 'vbox',
+            align: 'stretch'
+        },
+        items: [{
+              xtype: 'box',
+              margin: 5,
+              html: `This is an export section. It allows you to specify which data will be stored as json files `
+            },{
+            xtype: 'container',
+            ignoreAssignment: true,
+            name: '.',
+            layout : {
+                type: 'hbox',
+                align: 'stretch'
+            },
+            height: 40,
+            items: [{
+                xtype: 'box',
+                width: 115
+            }, {
+                xtype: 'button',
+                text: 'Add section',
+                handler: function() {
+                    editorExport.add(exportSection());
+                    editorExport.doLayout();
+                },
+                height: 20,
+                margin: '10 0'
+            }],
+            getValue: function() {
+                const sections = editorExport.queryBy( (x) => !!x.isSection);
+                const values = sections.map( (section) => section.getValue() );
+                const result = {};
+                for (var v of values) {
+                    result[v.name] = v.url;
+                }
+                return result;
+            },
+            setValue: function(v) {
+                this.value = v;
+                for (var k in v) {
+                    const section = exportSection();
+                    editorExport.add(section);
+                    editorExport.doLayout();
+                    section.setValue({ name: k, url: v[k] });
+                }
+            }
+        }]
+    });
+
     const editor = new Ext.Container({
         flex: 1,
         style: {
             overflowY: 'auto'
         },
-        items: [editorGlobal, editorTwitter, editorValidator, editorRelation, editorMembership, editorHome, editorAds] 
+        items: [editorGlobal, editorTwitter, editorValidator, editorRelation, editorMembership, editorHome, editorAds, editorPresets, editorPrerender, editorExport] 
     });
 
     const descriptionPanel = new Ext.Panel({
@@ -1672,7 +1984,7 @@ function getSettingsYmlEditor() {
         }, {
             xtype: 'container',
             region: 'east',
-            width: 500,
+            width: 300,
             layout: {
                 padding: 5,
                 type: 'vbox',
@@ -3137,7 +3449,6 @@ function init() {
 
 }
 
-window.getChangedFiles = getChangedFiles;
 window.collectAllFiles = collectAllFiles;
 Ext.onReady(function() {
     init();
