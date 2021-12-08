@@ -2081,12 +2081,7 @@ function getLandscapeYmlEditor() {
         store.on('datachanged', () => mainContainer.fireEvent('save-preview'));
     }
 
-    const grid = new Ext.grid.Panel({
-        flex: 1,
-        padding: 5,
-        frame: true,
-        store: store,
-        tbar: [{
+    const tbar = [{
             xtype: 'button',
             text: 'Add new item',
             handler: function() {
@@ -2221,28 +2216,121 @@ function getLandscapeYmlEditor() {
             enableToggle: true,
             toggled: true,
             text: 'Enable preview'
-        }],
+    }];
+
+    const grid = new Ext.grid.Panel({
+        flex: 1,
+        padding: 5,
+        frame: true,
+        store: store,
+        viewConfig: {
+            getRowClass: function() {
+                return 'main-grid';
+            },
+            forceFit: true
+        },
         columns: [{
             sortable: false,
-            text: 'Category',
-            dataIndex: 'category',
-            width: 150
-        }, {
-            sortable: false,
-            text: 'Subcategory',
-            dataIndex: 'subcategory',
-            width: 150
-        }, {
-            sortable: false,
-            text: 'Name',
+            text: 'Category and Name',
             dataIndex: 'name',
-            width: 150
-        }, {
-            sortable: false,
-            text: 'Crunchbase',
-            dataIndex: 'crunchbase',
-            renderer: (x) => x.replace('https://www.crunchbase.com/organization/', ''),
-            width: 150
+            width: 300,
+            renderer: function(v, attrs, record) {
+                return `<div>
+                  <div style="font-size: 12px; font-weight: bold;">${record.get('category')} - ${record.get('subcategory')}</div>
+                  <div style="font-size: 12px;">${v}</div>
+                  </div>
+                `;
+            }
+        }]
+    });
+
+    const previewComponent = new Ext.ComponentMgr.create({
+        xtype: 'box',
+        width: 620,
+        height: 400,
+        html: `
+          <div style="overflow: hidden; position: relative;">
+              <div id="grid-preview-status" style="z-index: 2;position: absolute; top: 0; right: 0; height: 15px; width: 100px; color: white; text-align: center; background: rgb(21, 127,204);" ></div>
+              <iframe style="border: 0; position: relative; width: 1050px; height: 800px; left: -20px; top: -25px;"></iframe>
+          </div>
+        `
+    });
+
+    const previewSelectedItem = async function(options = {}) {
+        const selectedItem = sm.getSelection()[0];
+        const iframe = previewComponent.getEl().dom.querySelector('iframe');
+        if (!selectedItem) {
+            iframe.src = '';
+            return;
+        }
+        const response = await fetch('/api/item-id', {
+            method: 'POST',
+            body: JSON.stringify({
+                socketId: window.socketId, 
+                name: selectedItem.get('name'),
+                path: selectedItem.get('category') + ' / ' + selectedItem.get('subcategory')
+            }),
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json' 
+            }
+        });
+        const itemInfo = await response.json();
+        if (itemInfo.id) {
+            iframe.src = `/landscape/item/${selectedItem.get('name')}.html`;
+        } else {
+            iframe.src = '';
+        }
+    };
+
+    previewComponent.on('afterrender', function() {
+        const el = previewComponent.getEl();
+        const iframe = el.dom.querySelector('iframe');
+
+        Ext.globalEvents.on('finish', function(data) {
+            if (data.target === 'server') {
+                if (data.code === 0) {
+                    // we need to actually reload a page!
+                    previewSelectedItem({forceReload: true});
+                }
+            }
+        });
+
+        Ext.globalEvents.on('status', function(data) {
+            if (data.target === 'server') {
+                const el = document.querySelector('#grid-preview-status');
+                if (data.status === 'progress') {
+                    el.innerText = 'Building preview...'
+                } else if (data.status === 'success') {
+                    el.innerText = 'Preview ready'
+                } else if (data.status === 'failure') {
+                    el.innerText = 'Preview failed'
+                }
+            }
+        });
+
+    });
+
+    const leftSide = new Ext.Panel({
+        flex: 1,
+        padding: 5,
+        frame: true,
+        tbar: tbar,
+        layout: {
+            type: 'hbox',
+            align: 'stretch'
+        },
+        items: [grid, {
+            margin: '0 5',
+            xtype: 'panel',
+            frame: true,
+            width: 620,
+            title: 'Preview selected item',
+            layout: {
+                type: 'vbox',
+                align: 'stretch'
+            },
+            items: [previewComponent]
         }]
     });
 
@@ -2738,7 +2826,7 @@ function getLandscapeYmlEditor() {
         items: [{
             xtype: 'container',
             region: 'center',
-            items: [ grid ],
+            items: [ leftSide ],
             layout: {
                 padding: 5,
                 type: 'vbox',
@@ -2787,77 +2875,9 @@ function getLandscapeYmlEditor() {
         height: 818
     });
 
-    const previewSelectedItem = async function(options = {}) {
-        const selectedItem = sm.getSelection()[0];
-        const iframe = document.querySelector('#grid-preview iframe');
-        if (!selectedItem) {
-            iframe.src = '';
-            return;
-        }
-        const response = await fetch('/api/item-id', {
-            method: 'POST',
-            body: JSON.stringify({
-                socketId: window.socketId, 
-                name: selectedItem.get('name'),
-                path: selectedItem.get('category') + ' / ' + selectedItem.get('subcategory')
-            }),
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json' 
-            }
-        });
-        const itemInfo = await response.json();
-        if (itemInfo.id) {
-            if (!options.forceReload && iframe.contentWindow.landscapeRouter) {
-                iframe.contentWindow.landscapeRouter.push(`/card-mode?selected=${itemInfo.id}`);
-            } else {
-                iframe.src = `/landscape/card-mode.html?selected=${itemInfo.id}&style="body{zoom:0.7}"`;
-            }
-        } else {
-            iframe.src = '';
-        }
-    }
 
     grid.on('afterrender', function() {
-        const parent = grid.el.dom;
-        Ext.DomHelper.append(Ext.getBody(), `
-          <div id="grid-preview" style="position: absolute; z-index: 1; width: 620px ; height: 400px; right: 490px; bottom: 0px;
-                       background: white; border: 1px solid black; border-radius: 5px; overflow: hidden;">
-              <div id="grid-preview-status" style="z-index: 2;position: absolute; top: 0; right: 0; height: 15px; width: 100px; color: white; text-align: center; background: rgb(21, 127,204);" ></div>
-              <iframe style="border: 0; position: relative; width: 1200px; height: 800px; left: -290px; top: -200px;"></iframe>
-          </div>
-        `);
-        grid.preview = document.querySelector('#grid-preview');
-        const iframe = grid.preview.querySelector('iframe');
-
-        Ext.globalEvents.on('finish', function(data) {
-            if (data.target === 'server') {
-                if (data.code === 0) {
-                    // we need to actually reload a page!
-                    previewSelectedItem({forceReload: true});
-                }
-            }
-        });
-
-        Ext.globalEvents.on('status', function(data) {
-            if (data.target === 'server') {
-                const el = document.querySelector('#grid-preview-status');
-                if (data.status === 'progress') {
-                    el.innerText = 'Building preview...'
-                } else if (data.status === 'success') {
-                    el.innerText = 'Preview ready'
-                } else if (data.status === 'failure') {
-                    el.innerText = 'Preview failed'
-                }
-            }
-        });
-
-        Ext.globalEvents.on('tabchange', function(tabId) {
-            const isVisible = tabId === 'landscape';
-            Ext.get(grid.preview).setVisible(isVisible);
-        });
-
-        grid.dockedItems.findBy( (x) => x.xtype === 'toolbar').items.insert(0,
+        grid.ownerCt.dockedItems.findBy( (x) => x.xtype === 'toolbar').items.insert(0,
             new Ext.Button({
                 xtype: 'button',
                 text: 'Save landscape.yml',
