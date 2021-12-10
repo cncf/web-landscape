@@ -2211,12 +2211,7 @@ function getLandscapeYmlEditor() {
                 wnd.show();
                 panel.loadData(mainContainer.data);
             }
-        }, '-', {
-            xtype: 'button',
-            enableToggle: true,
-            toggled: true,
-            text: 'Enable preview'
-    }];
+        }];
 
     const grid = new Ext.grid.Panel({
         flex: 1,
@@ -2234,6 +2229,8 @@ function getLandscapeYmlEditor() {
             text: 'Category and Name',
             dataIndex: 'name',
             width: 300,
+            autoSizeColumn: true,
+            flex: 1,
             renderer: function(v, attrs, record) {
                 return `<div>
                   <div style="font-size: 12px; font-weight: bold;">${record.get('category')} - ${record.get('subcategory')}</div>
