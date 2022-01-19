@@ -184,43 +184,78 @@ app.post('/api/connect', async function(req, res) {
     }
 
     const fn = async () => {
-        isUpdatingLandscape[req.body.repo] = true;
+        const isPredefinedRepo = githubRepoLandscapes.indexOf(req.body.repo) !== -1;
+        console.info({isPredefinedRepo, repo: req.body.repo});
         const tmpPath = path.resolve(tmpFolder, socketId, 'landscape');
         const previewPath = path.resolve(tmpFolder, socketId, 'preview');
         await fs.mkdir(tmpPath, { recursive: true});
 
-        const defaultBranch = (await exec(`cd tmp-landscapes/${repoFolder} && git rev-parse --abbrev-ref HEAD`)).stdout.trim();
+        if (isPredefinedRepo) {
+            isUpdatingLandscape[req.body.repo] = true;
+            const defaultBranch = (await exec(`cd tmp-landscapes/${repoFolder} && git rev-parse --abbrev-ref HEAD`)).stdout.trim();
+            const pullRequest = await getPullRequest({req, res});
+            const createPullRequest = `https://github.com/${req.body.repo}/compare/${defaultBranch}...${branch}`;
+            // check if there is a pull request for a given branch;
 
-        const pullRequest = await getPullRequest({req, res});
-        const createPullRequest = `https://github.com/${req.body.repo}/compare/${defaultBranch}...${branch}`;
-        // check if there is a pull request for a given branch;
-
-        clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: `default branch is ${defaultBranch}\n`}));
-        const cmd = ` git clone ../../../tmp-landscapes/${repoFolder} . && \
+            clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: `default branch is ${defaultBranch}\n`}));
+            const cmd = ` git clone ../../../tmp-landscapes/${repoFolder} . && \
                     git remote rm origin && \
                     git remote add origin ${repoUrl} && \
                     git fetch && \
                     git reset --hard origin/${defaultBranch} && \
                     (git checkout -t origin/${branch} || git checkout -b ${branch}) \
                     `
-        const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
+            const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
 
-        pid.stdout.on('data', (data) => {
-            clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
-        });
+            pid.stdout.on('data', (data) => {
+                clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
+            });
 
-        pid.stderr.on('data', (data) => {
-            clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
-        });
+            pid.stderr.on('data', (data) => {
+                clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: data.toString()}));
+            });
 
-        pid.on('close', async (code) => {
-            isUpdatingLandscape[req.body.repo] = false;
-            if (code === 0) {
-                await initializePreview(socketId);
+            pid.on('close', async (code) => {
+                isUpdatingLandscape[req.body.repo] = false;
+                if (code === 0) {
+                    await initializePreview(socketId);
+                }
+                clientSocket.send(JSON.stringify({type: 'finish', target: 'connect', code }));
+                res.json({success: true, pid: pid.pid, pr: (pullRequest || {}).url, createPr: createPullRequest});
+            });
+        } else {
+            // that is not our landscape, lets clone it
+            const repo = req.body.repo;
+            const repoName = req.body.repo.split('/')[1];
+            const client = require('@octokit/core').Octokit;
+            const octokit = new client({
+                auth: (process.env.GITHUB_KEY || '').split(',')[0]
+            });
+            console.info(`This is a custom repo ${req.body.repo} ${repoName}`);
+
+            try {
+                await octokit.request(`GET /repos/CNCF-Bot/${repoName}`);
+                console.info(`Fork exists`);
+            } catch(err) {
+                // the repo does not exist!
+                clientSocket.send(JSON.stringify({type: 'message', target: 'connect', text: 'Forking the repo!'}));
+                const url = `/repos/${repo}/forks`;
+                console.info(`Forking ${url}`);
+                await octokit.request(`POST ${url}`);
             }
+
+            const repoUrl = `https://$GITHUB_USER:$GITHUB_TOKEN@github.com/CNCF-Bot/${repoName}`;
+            await exec(`cd ${tmpPath} && git clone https://github.com/${repo} && git remote add copy ${repoUrl} && git fetch -a`);
+            const defaultBranch = (await exec(`cd ${tmpPath} && git rev-parse --abbrev-ref HEAD`)).stdout.trim();
+            await exec(`cd ${tmpPath} && (git checkout -t copy/${branch} || git checkout -b ${branch})`);
+            const pullRequest = await getPullRequest({req, res});
+            const createPullRequest = `https://github.com/${req.body.repo}/compare/${defaultBranch}...CNCF-Bot:${branch}`;
+
+            await initializePreview(socketId);
             clientSocket.send(JSON.stringify({type: 'finish', target: 'connect', code }));
             res.json({success: true, pid: pid.pid, pr: (pullRequest || {}).url, createPr: createPullRequest});
-        });
+
+        }
     }
 
     if (isUpdatingLandscape[req.body.repo]) {
@@ -265,7 +300,7 @@ app.post('/api/upload-file', async function(req, res) {
     if (!isPreview) {
         await updatePreview({socketId, dir: req.body.dir, name: req.body.name });
 
-        const cmd = `git add . && git commit -m 'update ${req.body.name}' && git push origin HEAD`;
+        const cmd = `git add . && git commit -m 'update ${req.body.name}' && (git push copy HEAD || git push origin HEAD)`;
         const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
 
         pid.stdout.on('data', (data) => {
@@ -323,7 +358,7 @@ app.post('/api/fetch', async (req, res) => {
             clientSocket.send(JSON.stringify({type: 'files', files: diff }));
             clientSocket.send(JSON.stringify({type: 'finish', target: 'fetch', code }));
         } else {
-            const cmd = `git add . && git commit -m 'yarn fetch' && git push origin HEAD`;
+            const cmd = `git add . && git commit -m 'yarn fetch' && (git push copy HEAD || git push origin HEAD)`;
             const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
 
             pid.stdout.on('data', (data) => {
