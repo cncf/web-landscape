@@ -1,4 +1,13 @@
 const isChrome = !!navigator.userAgent.match(/Chrome\/(\S+)/);
+const oldGetValue = Ext.form.field.Number.prototype.getValue;
+Ext.form.field.Number.prototype.getValue = function() {
+    const result = oldGetValue.apply(this, arguments);
+    if (result === null) {
+        return '';
+    }
+    return result;
+}
+Ext.form.field.Number.prototype.mouseWheelEnabled = false;
 const remoteBackend = {
     type: 'remote',
     getDescription: () => `${remoteBackend.repo}#${remoteBackend.branch}`,
@@ -639,21 +648,725 @@ async function saveSettings(values) {
     await activeBackend.writeFile({name: 'settings.yml', content: yml });
 }
 
+const defaultEditorSettings = {
+    layout: 'form',
+    bodyPadding: 10,
+    margin: 10,
+    labelWidth: 200,
+    defaults: {
+        width: 190,
+        margins: '10 0'
+    },
+    bodyStyle: {
+        overflowY: 'auto'
+    }
+};
+
+function getBigPictureEditor() {
+
+    const makeElements = function() {
+        const container = new Ext.Container({
+            ...defaultEditorSettings,
+            margin: 10,
+            layout: {
+                type: 'vbox',
+                align: 'stretch'
+            },
+            items: [{
+                xtype: 'container',
+                ignoreAssignment: true,
+                name: 'elements',
+                layout : {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                items: [{
+                    xtype: 'button',
+                    text: 'Add element',
+                    handler: function() {
+                        const newElement = makeElement();
+                        container.add(newElement);
+                        newElement.setValue({type: ''});
+                        container.doLayout();
+                        newElement.el.dom.scrollIntoView();
+                    },
+                    margin: '0 10'
+                }],
+                getValue: function() {
+                    if (!this.rendered) {
+                        return this.value;
+                    }
+                    const elements = container.queryBy( (x) => !!x.isElement);
+                    const values = elements.map( (element) => element.getValue() );
+                    return values;
+                },
+                setValue: function(v) {
+                    this.value = v;
+                    for (var item of v) {
+                        const element = makeElement();
+                        container.add(element);
+                        container.doLayout();
+                        element.setValue(item);
+                    }
+                }
+            }]
+        });
+        return container;
+    }
+
+    const makeElement = function() {
+        const typeCombobox = new Ext.ComponentMgr.create({
+            name: 'type',
+            fieldLabel: 'type',
+            description: 'Choose an element type',
+
+            xtype: 'combo',
+            displayField: 'name',
+            valueField: 'id',
+            width: 120,
+            store: new Ext.data.JsonStore({
+                fields: ['id', 'name'],
+                data: [
+                    'HorizontalCategory',
+                    'VerticalCategory',
+                    'LandscapeInfo',
+                    'LandscapeLink'
+                ].map( (x) => ({id: x, name: x}))
+            }),
+            editable: false,
+            value: '',
+            queryMode: 'local',
+            selectOnFocus: false,
+            triggerAction: 'all',
+            autoSelect: true,
+            forceSelection: true
+        });
+
+        function elementsVisibility() {
+            const items = panel.queryBy( (x) => !!x.showIf);
+            const value = typeCombobox.getValue();
+            for (let item of items) {
+                const isVisible = item.showIf.indexOf(value) !== -1;
+                item.setVisible(isVisible);
+            }
+        }
+
+        typeCombobox.on('change', elementsVisibility);
+        typeCombobox.on('select', elementsVisibility);
+        const originalSetValue = typeCombobox.setValue;
+        typeCombobox.setValue = function() {
+            originalSetValue.apply(this, arguments);
+            elementsVisibility();
+        }
+
+        // manage visibility
+
+        const panel = new Ext.Panel({
+            isElement: true,
+            ignoreAssignment: true,
+            frame: true,
+            margin: 5,
+            items: [{
+                xtype: 'container',
+                ...defaultEditorSettings,
+                items: [typeCombobox, {
+                    xtype: 'textfield',
+                    name: 'category',
+                    fieldLabel: 'category',
+                    description: 'Choose a category to display',
+                    showIf: ['HorizontalCategory', 'VerticalCategory']
+                }, {
+                    xtype: 'numberfield',
+                    name: 'cols',
+                    fieldLabel: 'cols',
+                    description: 'Number of columns in a vertical category',
+                    showIf: ['VerticalCategory']
+                }, {
+                    xtype: 'numberfield',
+                    name: 'rows',
+                    fieldLabel: 'rows',
+                    description: 'Number of rows',
+                    showIf: ['HorizontalCategory']
+                }, {
+                    xtype: 'numberfield',
+                    name: 'width',
+                    fieldLabel: 'width',
+                    description: 'Width of a section in pixels'
+                }, {
+                    xtype: 'numberfield',
+                    name: 'height',
+                    fieldLabel: 'height',
+                    description: 'Height of a section in pixels'
+                }, {
+                    xtype: 'numberfield',
+                    name: 'top',
+                    fieldLabel: 'top',
+                    description: 'Y coordinate of a box in pixels'
+                }, {
+                    xtype: 'numberfield',
+                    name: 'left',
+                    fieldLabel: 'left',
+                    description: 'X coordinate of a box in pixels'
+                }, {
+                    xtype: 'textfield',
+                    name: 'color',
+                    fieldLabel: 'color',
+                    description: 'A border color',
+                    showIf: ['HorizontalCategory', 'VerticalCategory', 'LandscapeLink']
+                }, {
+                    xtype: 'textfield',
+                    name: 'url',
+                    fieldLabel: 'url',
+                    description: `Relative url of other landscape, for example <i>main</i>, a screenshot of this tab will be rendered and displayed here<br/>
+                    Also this can be a link to an external landscape, like https://l.aswf.io`,
+                    showIf: ['LandscapeLink'],
+                }, {
+                    xtype: 'textfield',
+                    name: 'image',
+                    fieldLabel: 'image',
+                    description: `Should empty if this is a link to a different page on this landscape. A full path to the image preview if this is a link to an external landscape`,
+                    showIf: ['LandscapeLink'],
+                }, {
+                    xtype: 'textfield',
+                    name: 'title',
+                    fieldLabel: 'title',
+                    description: 'A text on top of a preview',
+                    showIf: ['LandscapeLink'],
+                }, {
+                    xtype: 'textfield',
+                    name: 'layout',
+                    fieldLabel: 'layout',
+                    description: 'Category or a subcategory',
+                    showIf: ['LandscapeLink'],
+                }]
+            }, makeLandscapeInfoChildren(), {
+                xtype: 'container',
+                layout : {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                height: 30,
+                items: [{
+                    xtype: 'box',
+                    flex: 1
+                }, {
+                    xtype: 'button',
+                    text: 'DELETE ELEMENT',
+                    style: {
+                        color: 'red'
+                    },
+                    margin: '0 10 10 0',
+                    handler: function() {
+                        panel.ownerCt.remove(panel);
+                    },
+                    height: 20
+                }]
+            }],
+            setValue: function(v) {
+                panel.value = v;
+                for (var key in v) {
+                    var value = v[key];
+                    const item = panel.queryBy( (x) => x.name === key && x.up('[ignoreAssignment]') === panel)[0];
+                    if (item) { //workaround
+                        item.setValue(value);
+                    }
+                }
+            },
+            getValue: function() {
+                const value = panel.value || {};
+                const fields = panel.queryBy( (x) => !!x.name && x.isVisible());
+                for (var field of fields) {
+                    const parent = field.up('[ignoreAssignment]');
+                    if (parent === this) {
+                        if (field.getValue() === '') {
+                            delete value[field.name];
+                        } else {
+                            value[field.name] = field.getValue();
+                        }
+                    }
+                }
+                return value;
+            }
+        });
+        return panel;
+    }
+
+    const makeLandscapeInfoChildren = function() {
+        const container = new Ext.Container({
+            ...defaultEditorSettings,
+            margin: 10,
+            layout: {
+                type: 'vbox',
+                align: 'stretch'
+            },
+            showIf: ['LandscapeInfo'],
+            items: [{
+                xtype: 'container',
+                ignoreAssignment: true,
+                name: 'children',
+                showIf: ['LandscapeInfo'],
+                layout : {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                items: [{
+                    xtype: 'button',
+                    text: 'Add child element',
+                    handler: function() {
+                        const newElement = makeLandscapeInfoElement();
+                        container.add(newElement);
+                        container.doLayout();
+                        newElement.el.dom.scrollIntoView();
+                    },
+                    margin: '0 10'
+                }],
+                getValue: function() {
+                    const elements = container.queryBy( (x) => !!x.isLandscapeInfoElement);
+                    const values = elements.map( (element) => element.getValue() );
+                    return values;
+                },
+                setValue: function(v) {
+                    this.value = v;
+                    for (var item of v) {
+                        const element = makeLandscapeInfoElement();
+                        container.add(element);
+                        container.doLayout();
+                        element.setValue(item);
+                    }
+                }
+            }]
+        });
+        return container;
+    }
+
+    const makeLandscapeInfoElement = function() {
+        const typeCombobox = new Ext.ComponentMgr.create({
+            name: 'type',
+            fieldLabel: 'type',
+            description: 'Choose an element type',
+            xtype: 'combo',
+            displayField: 'name',
+            valueField: 'id',
+            width: 120,
+            store: new Ext.data.JsonStore({
+                fields: ['id', 'name'],
+                data: [
+                    'text',
+                    'image',
+                    'title',
+                ].map( (x) => ({id: x, name: x}))
+            }),
+            editable: false,
+            value: '',
+            queryMode: 'local',
+            selectOnFocus: false,
+            triggerAction: 'all',
+            autoSelect: true,
+            forceSelection: true
+        });
+
+        function elementsVisibility() {
+            const items = panel.queryBy( (x) => !!x.showIf);
+            const value = typeCombobox.getValue();
+            for (let item of items) {
+                const isVisible = item.showIf.indexOf(value) !== -1;
+                item.setVisible(isVisible);
+            }
+        }
+
+        typeCombobox.on('change', elementsVisibility);
+        typeCombobox.on('select', elementsVisibility);
+        const originalSetValue = typeCombobox.setValue;
+        typeCombobox.setValue = function() {
+            originalSetValue.apply(this, arguments);
+            elementsVisibility();
+        }
+
+        // manage visibility
+
+        const panel = new Ext.Panel({
+            isLandscapeInfoElement: true,
+            ignoreAssignment: true,
+            frame: true,
+            margin: 5,
+            items: [{
+                xtype: 'container',
+                ...defaultEditorSettings,
+                items: [typeCombobox, {
+                    xtype: 'textarea',
+                    name: 'text',
+                    fieldLabel: 'text',
+                    description: 'A text you want to display',
+                    showIf: ['text']
+                }, {
+                    xtype: 'textfield',
+                    name: 'title',
+                    fieldLabel: 'title',
+                    description: '',
+                    showIf: ['image', 'title']
+                }, {
+                    xtype: 'numberfield',
+                    name: 'font_size',
+                    fieldLabel: 'font_size',
+                    description: 'The font size of the text',
+                    showIf: ['text', 'title']
+                }, {
+                    xtype: 'numberfield',
+                    name: 'width',
+                    fieldLabel: 'width',
+                    description: 'Width of a section in pixels. You can keep it blank'
+                }, {
+                    xtype: 'numberfield',
+                    name: 'height',
+                    fieldLabel: 'height',
+                    description: 'Height of a section in pixels. You can keep it blank'
+                }, {
+                    xtype: 'numberfield',
+                    name: 'top',
+                    fieldLabel: 'top',
+                    description: 'top coordinate. You can keep it blank'
+                }, {
+                    xtype: 'numberfield',
+                    name: 'left',
+                    fieldLabel: 'left',
+                    description: 'left coordinate. You can keep it blank'
+                }, {
+                    xtype: 'numberfield',
+                    name: 'right',
+                    fieldLabel: 'right',
+                    description: 'right coordinate. You can keep it blank'
+                }, {
+                    xtype: 'numberfield',
+                    name: 'bottom',
+                    fieldLabel: 'bottom',
+                    description: 'bottom coordinate. You can keep it blank'
+                }, {
+                    showIf: ['image'],
+                    xtype: 'container',
+                    layout: 'absolute',
+                    height: 15,
+                    items: [{
+                        x: 110,
+                        y: 1,
+                        xtype: 'box',
+                        cls: 'x-form-item-label',
+                        html: `<i>/images/</i>`
+                    }]
+                }, {
+                    showIf: ['image'],
+                    xtype: 'textfield',
+                    fieldLabel: 'image',
+                    name: 'image',
+                    description: `a file name in the <i>images/</i> folder. Please try to keep it easy like info1.svg`,
+                    setValue: function(v) {
+                        v = v ? v.replace('/images/', '') : v;
+                        Ext.form.field.Text.prototype.setValue.call(this, v);
+                    },
+                    getValue: function() {
+                        let v = Ext.form.field.Text.prototype.getValue.call(this);
+                        v = v.replace('/images/', '');
+                        return v;
+                    }
+                }, {
+                    showIf: ['image'],
+                    xtype: 'container',
+                    height: 90,
+                    layout: { type: 'absolute' },
+                    items: [{
+                        xtype: 'box',
+                        height: 90,
+                        x: 105,
+                        y: 0,
+                        width: 200,
+                        isSettingsImg: true,
+                        autoEl: {
+                            tag: 'img',
+                            styles: { border: '1px solid green' }
+                        }
+                    }, {
+                        x: 325,
+                        y: 0,
+                        xtype: 'box',
+                        width: 85,
+                        height: 60,
+                        isUpload: true,
+                        autoEl: {
+                            tag: 'input',
+                            type: 'file',
+                            value: 'Choose a file to upload...'
+                        }
+                    }]
+                }]
+            }, {
+                xtype: 'container',
+                layout : {
+                    type: 'hbox',
+                    align: 'stretch'
+                },
+                height: 30,
+                items: [{
+                    xtype: 'box',
+                    flex: 1
+                }, {
+                    xtype: 'button',
+                    text: 'DELETE ELEMENT',
+                    style: {
+                        color: 'red'
+                    },
+                    margin: '0 10 10 0',
+                    handler: function() {
+                        panel.ownerCt.remove(panel);
+                    },
+                    height: 20
+                }]
+            }],
+            setValue: function(v) {
+                panel.value = v;
+                for (var key in v) {
+                    var value = v[key];
+                    const item = panel.queryBy( (x) => x.name === key && x.up('[ignoreAssignment]') === panel)[0];
+                    if (item) { //workaround
+                        item.setValue(value);
+                    }
+                }
+            },
+            getValue: function() {
+                const value = panel.value || {};
+                const fields = panel.queryBy( (x) => !!x.name && x.isVisible());
+                for (var field of fields) {
+                    const parent = field.up('[ignoreAssignment]');
+                    if (parent === this) {
+                        if (field.getValue() === '') {
+                            delete value[field.name];
+                        } else {
+                            value[field.name] = field.getValue();
+                        }
+                    }
+                }
+                return value;
+            }
+        });
+
+        panel.on('render', function() {
+            const updateLogo = async function() {
+                const img = panel.down(`[name=image]`).getValue();
+                if (img !== panel.previousImg) {
+                    panel.previousImg = img;
+                    const imgEl = panel.down('[isSettingsImg]').el.dom;
+                    // imgEl.src = "data:image/svg+xml;base64," + btoa('<svg></svg>');
+                    if (img) {
+                        try {
+                            const svg = await activeBackend.readFile({dir: 'images', name: img});
+                            imgEl.src= "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
+                        } catch(ex) {
+                            imgEl.src = "";
+                        }
+                    } else {
+                        imgEl.src = "data:image/svg+xml;base64," + btoa('<svg></svg>');
+                    }
+                }
+            }
+
+            panel.down('[isUpload]').el.on('change', function(e, dom) {
+                const fileInfo = dom.files[0];
+                if (fileInfo) {
+                    let fileReader = new FileReader();
+                    fileReader.onload = async function(event) {
+                        const content = fileReader.result.split('base64,')[1];
+                        const fileName = panel.down(`[name=image]`).getValue().replace('/images/', '');
+                        panel.previousImg = -1; // to trigger the redraw
+                        dom.value = '';
+                        if (!fileName) {
+                            Ext.Msg.alert('Error', 'Please fill in the <b>image</b> field first with a name of the file');
+                        } else {
+                            await activeBackend.writeFile({dir: 'images', name: fileName, content: content, encoding: 'base64' });
+                        }
+                    };
+                    fileReader.readAsDataURL(fileInfo);
+                }
+            });
+
+            setInterval(function() {
+                updateLogo();
+
+            }, 1000);
+
+        }, this, { delay: 1});
+        return panel;
+
+
+    }
+
+    const makeSection = function() {
+        const panel = new Ext.Panel({
+            isSection: true,
+            ignoreAssignment: true,
+            margin: 5,
+            items: [{
+                xtype: 'container',
+                ...defaultEditorSettings,
+                items: [{
+                    xtype: 'textfield',
+                    fieldLabel: 'key',
+                    name: 'key',
+                    description: `A key for this section. <b>main</b> should be a key for a first section`
+                }, {
+                    xtype: 'numberfield',
+                    fieldLabel: 'tab_index',
+                    name: 'tab_index',
+                    description: `The tab order. 0 is reserved for a card mode, if you want this landscape section to be the first one, set it to -1`
+                }, {
+                    xtype: 'textfield',
+                    fieldLabel: 'name',
+                    name: 'name',
+                    description: `A tab name in a list of tabs`
+                }, {
+                    xtype: 'textfield',
+                    fieldLabel: 'url',
+                    name: 'url',
+                    description: `a tab name in the url when it is selected`
+                }, {
+                    xtype: 'textfield',
+                    fieldLabel: 'short_name',
+                    name: 'short_name',
+                    description: `a short tab name on a mobile device`
+                }, {
+                    xtype: 'textfield',
+                    fieldLabel: 'title',
+                    name: 'title',
+                    description: `the header in this landscape`
+                }, {
+                    xtype: 'textarea',
+                    fieldLabel: 'fullscreen_header',
+                    name: 'fullscreen_header',
+                    description: `the header in this landscape when in a fullscreen mode or for rendering a .png / .pdf file`
+                }, {
+                    ...yesNoComboboxOptions,
+                    fieldLabel: 'fullscreen_hide_grey_logos',
+                    name: 'fullscreen_hide_grey_logos',
+                    description: `Ideal for members tab. Hides the "Grey logos are not open source" text`
+                }]}, makeElements(), {
+                    xtype: 'container',
+                    layout : {
+                        type: 'hbox',
+                        align: 'stretch'
+                    },
+                    height: 30,
+                    items: [{
+                        xtype: 'box',
+                        flex: 1
+                    }, {
+                        xtype: 'button',
+                        text: 'DELETE SECTION',
+                        style: {
+                            color: 'red'
+                        },
+                        margin: '0 10 10 0',
+                        handler: function() {
+                            panel.ownerCt.remove(panel);
+                        },
+                        height: 20
+                    }]
+            }],
+            setValue: function(v) {
+                panel.value = v;
+                for (var key in v) {
+                    var value = v[key];
+                    const item = panel.queryBy( (x) => x.name === key && x.up('[ignoreAssignment]') === panel)[0];
+                    if (!item) {
+                        console.warn(`we do not have name=${key}`);
+                    } else {
+                        item.setValue(value);
+                    }
+                }
+            },
+            getValue: function() {
+                const value = panel.value || {};
+                const fields = panel.queryBy( (x) => !!x.name);
+                for (var field of fields) {
+                    const parent = field.up('[ignoreAssignment]');
+                    if (parent === this) {
+                        if (field.getValue() === '') {
+                            delete value[field.name];
+                        } else {
+                            value[field.name] = field.getValue();
+                        }
+                    }
+                }
+                return value;
+            }
+        })
+        setInterval(function() {
+            if (!panel.isDestroyed) {
+                const keyField = panel.queryBy( (x) => x.name === 'key')[0];
+                panel.setTitle(keyField.getValue());
+            }
+        }, 1000);
+        return panel;
+    }
+
+    const bigPicturePanel = new Ext.Container({
+        title: 'big_picture',
+        section: 'big_picture',
+        ...defaultEditorSettings,
+        margin: 10,
+        layout: {
+            type: 'vbox',
+            align: 'stretch'
+        },
+        items: [{
+            xtype: 'container',
+            items: [{
+                xtype: 'button',
+                text: 'Add section',
+                width: 200,
+                handler: function() {
+                    const tabPanel = bigPicturePanel.down('[xtype=tabpanel]');
+                    tabPanel.add(makeSection());
+                    tabPanel.doLayout();
+                    tabPanel.setActiveTab(tabPanel.items.length - 1);
+                }
+            }]
+        }, {
+            frame: true,
+            xtype: 'tabpanel',
+            deferredRender: false,
+            ignoreAssignment: true,
+            name: '.',
+            tbar: [],
+            getValue: function() {
+                const sections = bigPicturePanel.queryBy( (x) => !!x.isSection);
+                const values = sections.map( (section) => section.getValue() );
+                const result = {};
+                for (var v of values) {
+                    const key = v.key;
+                    delete v.key;
+                    result[key] = v;
+                }
+                return result;
+            },
+            setValue: function(v) {
+                this.value = v;
+                for (var k in v) {
+                    const section = makeSection();
+                    bigPicturePanel.down('[xtype=tabpanel]').add(section);
+                    section.setValue({...v[k], key: k});
+                    bigPicturePanel.doLayout();
+                    bigPicturePanel.down('[xtype=tabpanel]').setActiveTab(0);
+                }
+            }
+        }]
+    });
+
+    return bigPicturePanel;
+
+}
+
 function getSettingsYmlEditor() {
 
-    const defaultEditorSettings = {
-        layout: 'form',
-        bodyPadding: 10,
-        margin: 10,
-        labelWidth: 200,
-        defaults: {
-            width: 190,
-            margins: '10 0'
-        }
-    };
-    const editorGlobal = new Ext.Panel({
+    const editorGlobal = new Ext.Container({
         ...defaultEditorSettings,
-        title: 'settings.yml global:',
+        title: 'global',
         section: 'global',
         frame: true,
         items: [{
@@ -794,8 +1507,8 @@ function getSettingsYmlEditor() {
         }]
     });
 
-    const editorTwitter = new Ext.Panel({
-        title: 'settings.yml twitter:',
+    const editorTwitter = new Ext.Container({
+        title: 'twitter',
         section: 'twitter',
         ...defaultEditorSettings,
         frame: true,
@@ -817,8 +1530,8 @@ function getSettingsYmlEditor() {
         }]
     });
 
-    const editorValidator = new Ext.Panel({
-        title: 'settings.yml validator:',
+    const editorValidator = new Ext.Container({
+        title: 'validator',
         section: 'validator',
         ...defaultEditorSettings,
         frame: true,
@@ -1037,8 +1750,8 @@ function getSettingsYmlEditor() {
         return panel;
     }
 
-    const editorRelation = new Ext.Panel({
-        title: 'settings.yml relation:',
+    const editorRelation = new Ext.Container({
+        title: 'relation',
         frame: true,
         section: 'relation',
         margin: 10,
@@ -1202,8 +1915,8 @@ function getSettingsYmlEditor() {
         return panel;
     };
 
-    const editorMembership = new Ext.Panel({
-        title: 'settings.yml membership:',
+    const editorMembership = new Ext.Container({
+        title: 'membership',
         frame: true,
         section: 'membership',
         margin: 10,
@@ -1222,7 +1935,7 @@ function getSettingsYmlEditor() {
             height: 40,
             items: [{
                 xtype: 'box',
-                width: 115
+                width: 5
             }, {
                 xtype: 'button',
                 text: 'Add section',
@@ -1260,8 +1973,8 @@ function getSettingsYmlEditor() {
         }]
     });
 
-    const editorHome = new Ext.Panel({
-        title: 'settings.yml home:',
+    const editorHome = new Ext.Container({
+        title: 'home',
         section: 'home',
         ...defaultEditorSettings,
         frame: true,
@@ -1344,7 +2057,7 @@ function getSettingsYmlEditor() {
                         x: 295,
                         y: 0,
                         xtype: 'box',
-                        width: 100,
+                        width: 85,
                         height: 60,
                         isUpload: true,
                         autoEl: {
@@ -1441,7 +2154,6 @@ function getSettingsYmlEditor() {
 
             setInterval(function() {
                 updateLogo();
-
             }, 1000);
 
         });
@@ -1450,8 +2162,8 @@ function getSettingsYmlEditor() {
         return panel;
     }
 
-    const editorAds = new Ext.Panel({
-        title: 'settings.yml ads:',
+    const editorAds = new Ext.Container({
+        title: 'ads',
         frame: true,
         section: 'ads',
         margin: 10,
@@ -1470,7 +2182,7 @@ function getSettingsYmlEditor() {
             height: 40,
             items: [{
                 xtype: 'box',
-                width: 115
+                width: 5
             }, {
                 xtype: 'button',
                 text: 'Add section',
@@ -1564,8 +2276,8 @@ function getSettingsYmlEditor() {
         return panel;
     };
 
-    const editorPresets = new Ext.Panel({
-        title: 'settings.yml presets:',
+    const editorPresets = new Ext.Container({
+        title: 'presets',
         frame: true,
         section: 'presets',
         margin: 10,
@@ -1584,7 +2296,7 @@ function getSettingsYmlEditor() {
             height: 40,
             items: [{
                 xtype: 'box',
-                width: 115
+                width: 5
             }, {
                 xtype: 'button',
                 text: 'Add section',
@@ -1678,8 +2390,8 @@ function getSettingsYmlEditor() {
         return panel;
     };
 
-    const editorPrerender = new Ext.Panel({
-        title: 'settings.yml prerender:',
+    const editorPrerender = new Ext.Container({
+        title: 'prerender',
         frame: true,
         section: 'prerender',
         margin: 10,
@@ -1702,7 +2414,7 @@ function getSettingsYmlEditor() {
             height: 40,
             items: [{
                 xtype: 'box',
-                width: 115
+                width: 5
             }, {
                 xtype: 'button',
                 text: 'Add section',
@@ -1801,8 +2513,8 @@ function getSettingsYmlEditor() {
         return panel;
     };
 
-    const editorExport = new Ext.Panel({
-        title: 'settings.yml export:',
+    const editorExport = new Ext.Container({
+        title: 'export',
         frame: true,
         section: 'export',
         margin: 10,
@@ -1825,7 +2537,7 @@ function getSettingsYmlEditor() {
             height: 40,
             items: [{
                 xtype: 'box',
-                width: 115
+                width: 5
             }, {
                 xtype: 'button',
                 text: 'Add section',
@@ -1857,8 +2569,8 @@ function getSettingsYmlEditor() {
         }]
     });
 
-    const editorTest = new Ext.Panel({
-        title: 'settings.yml test:',
+    const editorTest = new Ext.Container({
+        title: 'test',
         section: 'test',
         ...defaultEditorSettings,
         frame: true,
@@ -1880,14 +2592,20 @@ function getSettingsYmlEditor() {
         }]
     });
 
+    const editorBigPicture = getBigPictureEditor();
+    const wrapper = function(x) {
+        return {
+            xtype: 'container',
+            title: x.title,
+            overflowY: 'auto',
+            items: [x]
+        }
+    }
 
-
-    const editor = new Ext.Container({
+    const editor = new Ext.TabPanel({
+        deferredRender: false,
         flex: 1,
-        style: {
-            overflowY: 'auto'
-        },
-        items: [editorGlobal, editorTwitter, editorValidator, editorRelation, editorMembership, editorHome, editorAds, editorPresets, editorPrerender, editorExport, editorTest] 
+        items: [editorGlobal, editorTwitter, editorValidator, editorRelation, editorMembership, editorHome, editorBigPicture, editorAds, editorPresets, editorPrerender, editorExport, editorTest].map(wrapper)
     });
 
     const descriptionPanel = new Ext.Panel({
@@ -2499,7 +3217,7 @@ function getLandscapeYmlEditor() {
                     x: 295,
                     y: 0,
                     xtype: 'box',
-                    width: 100,
+                    width: 85,
                     height: 60,
                     isUpload: true,
                     autoEl: {
