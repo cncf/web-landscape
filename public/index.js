@@ -8,6 +8,7 @@ Ext.form.field.Number.prototype.getValue = function() {
     return result;
 }
 Ext.form.field.Number.prototype.mouseWheelEnabled = false;
+
 const remoteBackend = {
     type: 'remote',
     getDescription: () => `${remoteBackend.repo}#${remoteBackend.branch}`,
@@ -152,6 +153,26 @@ const yesNoComboboxOptions = {
     autoSelect: true,
     forceSelection: true
 };
+
+const simpleComboboxOptions = function(items) {
+    return {
+        xtype: 'combo',
+        displayField: 'name',
+        valueField: 'id',
+        width: 120,
+        store: new Ext.data.JsonStore({
+            fields: ['id', 'name'],
+            data: items.map( (x) => typeof x === 'object' ? x : {id: x, name: x})
+        }),
+        editable: false,
+        value: '',
+        queryMode: 'local',
+        selectOnFocus: false,
+        triggerAction: 'all',
+        autoSelect: true,
+        forceSelection: true
+    };
+}
 
 function getGithubSelector() {
 
@@ -833,10 +854,10 @@ function getBigPictureEditor() {
                     description: 'A text on top of a preview',
                     showIf: ['LandscapeLink'],
                 }, {
-                    xtype: 'textfield',
+                    ...simpleComboboxOptions(['category', 'subcategory']),
                     name: 'layout',
                     fieldLabel: 'layout',
-                    description: 'Category or a subcategory',
+                    description: 'category or a subcategory',
                     showIf: ['LandscapeLink'],
                 }]
             }, makeLandscapeInfoChildren(), {
