@@ -122,7 +122,9 @@ async function uploadFiles(req, res) {
     if (req.body.files) {
         const socketId = req.body.socketId;
         const previewPath = path.resolve(tmpFolder, socketId, 'preview');
+        console.info(1);
         await utils.uploadFiles({files: req.body.files, landscapePath: previewPath});
+        console.info(2);
     }
 }
 

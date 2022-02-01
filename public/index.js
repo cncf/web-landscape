@@ -103,6 +103,26 @@ function yaml2json(content) {
 }
 
 
+async function createMissingFiles() {
+    const files = {};
+    const landscapeFiles = ['settings.yml', 'landscape.yml', 'processed_landscape.yml'];
+    const landscapeFolders = ['images', 'cached_logos', 'hosted_logos'];
+    for (var dir of landscapeFolders) {
+        try {
+            await webFolder.getDirectoryHandle(folder);
+        } catch(ex) {
+            await webFolder.getDirectoryHandle(dir, { create: true});
+        }
+    }
+
+    for (var file of landscapeFiles) {
+        try {
+            await webFolder.getFileHandle(file);
+        } catch(ex) {
+            await webFolder.getFileHandle(file, { create: true});
+        }
+    }
+}
 
 async function collectAllFiles() {
     const files = {};
@@ -519,7 +539,18 @@ function getInitialForm() {
         }
         window.activeBackend = localBackend;
         // upload files
-        const files = await collectAllFiles();
+        let files = null;
+        try {
+            files = await collectAllFiles();
+        } catch(ex) {
+            console.info(`This is not a folder with a landscape. Do you want to initialize it?`);
+            Ext.Msg.confirm(`Create new landscape`, `No landscape found. Initialize a new landscape here?`, async function(button) {
+                if (button === 'yes') {
+                    await createMissingFiles();
+                    files = await collectAllFiles();
+                }
+            })
+        }
         await fetch('api/upload', {
             body: JSON.stringify({ socketId, files: Object.values(files) }),
             method: 'POST',
@@ -794,7 +825,10 @@ function getBigPictureEditor() {
                     xtype: 'textfield',
                     name: 'category',
                     fieldLabel: 'category',
-                    description: 'Choose a category to display',
+                    description: `
+                        Main tab: Choose a category to display. <br>
+                        Other tabs: Choose a subcategory to display. <br>
+                    `,
                     showIf: ['HorizontalCategory', 'VerticalCategory']
                 }, {
                     xtype: 'numberfield',
@@ -1266,6 +1300,11 @@ function getBigPictureEditor() {
                     fieldLabel: 'fullscreen_hide_grey_logos',
                     name: 'fullscreen_hide_grey_logos',
                     description: `Ideal for members tab. Hides the "Grey logos are not open source" text`
+                }, {
+                    xtype: 'textarea',
+                    fieldLabel: 'category',
+                    name: 'category',
+                    description: `If this is not a main tab - please provide a category containing items for this tab. Subcategories will be displayed`
                 }]}, makeElements(), {
                     xtype: 'container',
                     layout : {
@@ -4205,9 +4244,13 @@ async function getMainPanel() {
 }
 
 async function openMainApp() {
-    const mainPanel = await getMainPanel();
-    mainContainer.add(mainPanel);
-    mainContainer.getLayout().setActiveItem(mainPanel);
+    try {
+        const mainPanel = await getMainPanel();
+        mainContainer.add(mainPanel);
+        mainContainer.getLayout().setActiveItem(mainPanel);
+    } catch(ex) {
+        Ext.Msg.alert(`Failed to load yml files`, `please try a different project`);
+    }
 }
 
 function init() {

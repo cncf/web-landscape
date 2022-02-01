@@ -62,7 +62,8 @@ async function uploadFiles({landscapePath, files}) {
     }
     const folders = ['images', 'hosted_logos', 'cached_logos'];
     for (let folder of folders) {
-        const folderFiles = await fs.readdir(path.resolve(landscapePath, folder));
+        await fs.mkdir(path.resolve(landscapePath, folder), { recursive: true});
+        let folderFiles = await fs.readdir(path.resolve(landscapePath, folder));
         for (let folderFile of folderFiles) {
             const fullPath = `${folder}/${folderFile}`;
             if (!validFiles[fullPath]) {
