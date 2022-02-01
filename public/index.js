@@ -931,11 +931,13 @@ function getBigPictureEditor() {
             },
             getValue: function() {
                 const value = panel.value || {};
-                const fields = panel.queryBy( (x) => !!x.name && x.isVisible());
+                const fields = panel.queryBy( (x) => !!x.name);
                 for (var field of fields) {
                     const parent = field.up('[ignoreAssignment]');
                     if (parent === this) {
                         if (field.getValue() === '') {
+                            delete value[field.name];
+                        } else if (!field.isVisible()) {
                             delete value[field.name];
                         } else {
                             value[field.name] = field.getValue();
@@ -1189,11 +1191,13 @@ function getBigPictureEditor() {
             },
             getValue: function() {
                 const value = panel.value || {};
-                const fields = panel.queryBy( (x) => !!x.name && x.isVisible());
+                const fields = panel.queryBy( (x) => !!x.name);
                 for (var field of fields) {
                     const parent = field.up('[ignoreAssignment]');
                     if (parent === this) {
                         if (field.getValue() === '') {
+                            delete value[field.name];
+                        } else if (!field.isVisible()) {
                             delete value[field.name];
                         } else {
                             value[field.name] = field.getValue();
