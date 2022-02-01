@@ -696,8 +696,10 @@ async function saveSettingsPreview(values) {
 }
 
 async function saveSettings(values) {
+    Ext.Msg.wait('Saving settings.yml');
     const yml = yaml2json(values);
     await activeBackend.writeFile({name: 'settings.yml', content: yml });
+    Ext.Msg.hide();
 }
 
 const defaultEditorSettings = {
@@ -1301,7 +1303,7 @@ function getBigPictureEditor() {
                     name: 'fullscreen_hide_grey_logos',
                     description: `Ideal for members tab. Hides the "Grey logos are not open source" text`
                 }, {
-                    xtype: 'textarea',
+                    xtype: 'textfield',
                     fieldLabel: 'category',
                     name: 'category',
                     description: `If this is not a main tab - please provide a category containing items for this tab. Subcategories will be displayed`
