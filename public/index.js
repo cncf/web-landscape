@@ -3345,7 +3345,7 @@ function getLandscapeYmlEditor() {
                     const originalValue = Ext.form.field.Text.prototype.getValue.call(this).replace('https://www.crunchbase.com/organization/', '');
                     return originalValue ?  `https://www.crunchbase.com/organization/${originalValue}` : '' ;
                 },
-                description: 'A full url to the crunchbase entry. Allows to fetch additional information about the organization responsible for the entry'
+                description: `Crunchbase name. Allows to fetch additional information about the organization responsible for the entry. If empty - pleae fill in the <b>organization</b> text field at the bottom`
             }, {
                 xtype: 'container',
                 layout: 'absolute',
