@@ -90,25 +90,6 @@ async function cleanup() {
             await fs.rm(path.join(tmpFolder, folder),    { force: true, recursive: true });
         }
     }
-
-}
-
-async function prepareServerFolders() {
-    const folders = await fs.readdir(tmpFolder);
-    if (folders.length < maxServers ) {
-        const folderName = `tmp${Math.random()}`;
-        const finalFolderName = folderName.replace('tmp', 'server');
-        const appPath = path.resolve(tmpFolder, folderName);
-        await utils.cloneLandscapeApp({ srcPath: landscapeAppFolder, appPath: appPath });
-        await fs.rename(path.resolve(tmpFolder, folderName), path.resolve(tmpFolder, finalFolderName));
-        console.info(`Server prepared`);
-    }
-}
-
-async function getFreeFolder() {
-    const folders = await fs.readdir(tmpFolder);
-    const temporaryFolders = folders.filter( (x) => x.startsWith('server'));
-    return temporaryFolders[0];
 }
 
 async function autoUpdate() {
@@ -122,9 +103,7 @@ async function uploadFiles(req, res) {
     if (req.body.files) {
         const socketId = req.body.socketId;
         const previewPath = path.resolve(tmpFolder, socketId, 'preview');
-        console.info(1);
         await utils.uploadFiles({files: req.body.files, landscapePath: previewPath});
-        console.info(2);
     }
 }
 
@@ -323,11 +302,6 @@ app.post('/api/upload-file', async function(req, res) {
     }
 });
 
-
-
-
-
-
 app.post('/api/fetch', async (req, res) => {
     await uploadFiles(req, res);
     const socketId = req.body.socketId;
@@ -407,21 +381,9 @@ async function build({req, res }) {
         return;
     }
 
-    const appPath = path.resolve(tmpFolder, socketId, 'landscapeapp');
-
-    try {
-        await fs.access(appPath)
-    } catch (ex) {
-        const freeFolder = await getFreeFolder();
-        if (freeFolder) {
-            await fs.rename(path.resolve(tmpFolder, freeFolder), appPath);
-        } else {
-            await utils.cloneLandscapeApp({ srcPath: landscapeAppFolder, appPath: appPath });
-        }
-    }
-
-    const cmd = `PREVIEW=1 FORCE_COLOR=0 PROJECT_NAME=landscape PROJECT_PATH=../preview yarn preview`;
-    const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: appPath, detached: true });
+    const previewPath = path.resolve(tmpFolder, socketId, 'preview');
+    const cmd = `FORCE_COLOR=0 PROJECT_NAME=landscape PROJECT_PATH=${previewPath} yarn preview`;
+    const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: landscapeAppFolder, detached: true });
     console.info({cmd, appPath, pid: pid.pid});
 
     serverData[socketId] = {
@@ -457,6 +419,8 @@ app.post('/api/build', async function(req, res) {
     res.json({success: true});
 });
 
+// redirect to a proper landscape, serving a static file
+// TODO: support /api/ as well!
 app.use('/landscape', function(req, res) {
     const socketId = req.cookies.socketId;
     const entry = serverData[socketId];
@@ -464,7 +428,7 @@ app.use('/landscape', function(req, res) {
         res.end('<h1>Server is not ready</h1>');
     } else {
         // root is tmp/${socketId}/landscapeapp/out
-        const root = path.resolve('tmp', socketId, 'landscapeapp', 'out');
+        const root = path.resolve('tmp', socketId, 'preview');
         send(req, parseUrl(req).pathname.replace('/landscape', ''), { root }).pipe(res)
     }
 });
@@ -490,7 +454,6 @@ server.listen(httpsInfo ? 443 : process.env.PORT || 3000);
 
 // autocleanup everything regularly
 cleanup();
-prepareServerFolders();
 if (!process.env.SKIP_UPDATES) {
     autoUpdate();
     setInterval(autoUpdate, 1 * 60 * 1000);
@@ -499,7 +462,6 @@ if (!process.env.SKIP_UPDATES) {
     setInterval(fetchGithubRepoLandscapes, 4 * 3600 * 1000); //every 4 hour get a fresh repo
 }
 setInterval(cleanup, 1 * 60 * 1000);
-setInterval(prepareServerFolders, 1 * 60 * 1000);
 
 process.on('unhandledRejection', function(err) {
     console.log(err);
