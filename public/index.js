@@ -3058,7 +3058,7 @@ function getLandscapeYmlEditor() {
         });
         const itemInfo = await response.json();
         if (itemInfo.id) {
-            iframe.src = `/landscape/item/${selectedItem.get('name')}.html`;
+            iframe.src = `/landscape/data/items/full-${itemInfo.id}.html`;
         } else {
             iframe.src = '';
         }

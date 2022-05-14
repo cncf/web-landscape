@@ -2,42 +2,6 @@ const path = require('path');
 const fs = require('fs/promises');
 const childProcess = require('child_process');
 
-// clones a landscapeapp stored in the srcPath to appPath
-// in order to save space, hard links are created for node_modules(1.2Gb)
-async function cloneLandscapeApp({srcPath, appPath}) {
-    await fs.mkdir(appPath, { recursive: true});
-    await fs.rm(appPath, { force: true, recursive: true});
-    await fs.mkdir(appPath, { recursive: true});
-
-    async function walk(dir, isRoot) {
-        let files = await fs.readdir(dir);
-        files = await Promise.all(files.map(async file => {
-            const filePath = path.join(dir, file);
-            const stats = await fs.stat(filePath);
-            if (stats.isDirectory()) {
-                if (isRoot && file === '.next') {
-                    // console.info('Creating .next');
-                    await fs.mkdir(path.resolve(appPath, '.next'))
-                } else if (isRoot && file === '.git') {
-
-                    // console.info('Skipping .git');
-                } else {
-                    if (isRoot) {
-                    //    console.info('Walking into: ' + file, path.resolve(appPath, filePath.replace(srcPath + "/", '')), filePath);
-                    }
-                    await fs.mkdir(path.resolve(appPath, filePath.replace(srcPath + "/", '')));
-                    await walk(filePath);
-                }
-            }
-            else if(stats.isFile()) {
-                await fs.link(path.resolve(filePath), path.resolve(appPath, filePath.replace(srcPath + '/', ''))); 
-            }
-        }));
-    }
-    await walk(path.join(srcPath), true);
-
-}
-
 async function uploadFiles({landscapePath, files}) {
     await fs.mkdir(landscapePath, { recursive: true});
     console.info({landscapePath});
@@ -108,7 +72,6 @@ function calculateDifference({oldFiles, newFiles}) {
     return changedFiles.concat(deletedFiles);
 }
 
-exports.cloneLandscapeApp = cloneLandscapeApp;
 exports.collectFiles = collectFiles;
 exports.uploadFiles = uploadFiles;
 exports.calculateDifference = calculateDifference;

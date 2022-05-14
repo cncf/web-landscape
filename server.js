@@ -19,8 +19,6 @@ const utils = require('./utils');
 const port = process.env.PORT || 3000;
 const tmpFolder = process.env.TMP_FOLDER || 'tmp';
 const landscapeAppFolder = process.env.LANDSCAPEAPP_FOLDER || "../landscapeapp";
-let serverPort = 3010;
-const maxServers = 20;
 const maxTimeoutInMinutes = 720;
 
 const serverData = {}; // builds for every socket
@@ -355,7 +353,7 @@ app.post('/api/fetch', async (req, res) => {
 
 app.post('/api/item-id', async function(req, res) {
     const socketId = req.body.socketId;
-    const fileName = path.resolve(tmpFolder, socketId, 'landscapeapp', 'out', 'data', 'items.json');
+    const fileName = path.resolve(tmpFolder, socketId, 'preview/dist/landscape/data/items.json');
     const content = JSON.parse(await fs.readFile(fileName, 'utf-8'));
     const item = content.filter( (x) => x.path === req.body.path && x.name === req.body.name)[0]
     if (item) {
@@ -384,7 +382,7 @@ async function build({req, res }) {
     const previewPath = path.resolve(tmpFolder, socketId, 'preview');
     const cmd = `FORCE_COLOR=0 PROJECT_NAME=landscape PROJECT_PATH=${previewPath} yarn preview`;
     const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: landscapeAppFolder, detached: true });
-    console.info({cmd, appPath, pid: pid.pid});
+    console.info({cmd, previewPath, pid: pid.pid});
 
     serverData[socketId] = {
         pid: pid.pid,
@@ -419,6 +417,27 @@ app.post('/api/build', async function(req, res) {
     res.json({success: true});
 });
 
+app.use('/landscape/api/:name', function(req, res) {
+    const socketId = req.cookies.socketId;
+    const entry = serverData[socketId];
+    const query = req.url.split('?')[1] || '';
+    const previewPath = path.resolve(tmpFolder, socketId, 'preview/dist/landscape/functions', `landscape--${req.params.name}.js`);
+    console.info(previewPath);
+    require('child_process').exec(`node ${previewPath} '${query}'`, {
+        cwd: landscapeAppFolder
+    }, function(e, output, err) {
+        if (err) {
+            console.info(err);
+        }
+        if (req.params.name === 'export') {
+
+        } else {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(output);
+        }
+    });
+});
+
 // redirect to a proper landscape, serving a static file
 // TODO: support /api/ as well!
 app.use('/landscape', function(req, res) {
@@ -428,7 +447,7 @@ app.use('/landscape', function(req, res) {
         res.end('<h1>Server is not ready</h1>');
     } else {
         // root is tmp/${socketId}/landscapeapp/out
-        const root = path.resolve('tmp', socketId, 'preview');
+        const root = path.resolve('tmp', socketId, 'preview', 'dist', 'landscape');
         send(req, parseUrl(req).pathname.replace('/landscape', ''), { root }).pipe(res)
     }
 });
