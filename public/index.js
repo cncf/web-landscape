@@ -567,6 +567,8 @@ function getInitialForm() {
 
 const allowedKeys = [
     'name',
+    'second_path',
+    'license',
     'description',
     'homepage_url',
     'project',
@@ -3153,6 +3155,7 @@ function getLandscapeYmlEditor() {
         assign('category');
         assign('subcategory');
         assign('name');
+        assign('second_path');
         assign('homepage_url');
         assign('logo');
         assign('twitter');
@@ -3252,6 +3255,21 @@ function getLandscapeYmlEditor() {
                 triggerAction: 'all',
                 autoSelect: true,
                 forceSelection: true
+            }, {
+                xtype: 'textarea',
+                grow: true,
+                name: 'second_path',
+                fieldLabel: 'Extra categories',
+                description: `We support multiple categories for the same item. If you want this item to belong to multiple categories, specify them all in a format <pre>Category1 / Subcategory1</pre><br><pre>Category2 / Subcategory2</pre> , one category/subcategory per line`,
+                setValue: function(v) {
+                    const newValue = v ? [v].flat().join('\n') : '';
+                    Ext.form.field.TextArea.prototype.setValue.call(this, newValue);
+                },
+                getValue: function() {
+                    const originalValue = Ext.form.field.TextArea.prototype.getValue.call(this);
+                    const lines = originalValue.split('\n').filter( (x) => x.trim()).map( (x) => x.trim()).filter( (x) => !!x).map( (x) => x.split('/').map( (x) => x.trim()).join(' / '));
+                    return lines.length > 1 ? lines : lines.length === 1 ? lines[0] : '';
+                }
             }, {
                 xtype: 'textfield',
                 name: 'name',
@@ -3714,6 +3732,7 @@ function getLandscapeYmlEditor() {
             updateSubcategoryList();
             assign('subcategory');
             assign('name');
+            assign('second_path');
             assign('homepage_url');
             assign('logo');
             assign('twitter');
