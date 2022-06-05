@@ -492,11 +492,13 @@ app.post('/api/console/preview', async function(req, res) {
         output += data.toString();
     });
     pid.stderr.on('data', (data) => {
+        console.info(data.toString());
         output += data.toString();
     });
     pid.on('close', async (code) => {
         let generatedFiles = [];
         const distPath = path.resolve(previewPath, 'dist');
+        console.info({distPath});
         // whole dist should be returned here!
         const iterate = async function(baseDir) {
             const files = await fs.readdir(path.join(distPath, baseDir));
@@ -517,7 +519,11 @@ app.post('/api/console/preview', async function(req, res) {
                 }
             }
         }
-        await iterate('.');
+        try {
+            await iterate('.');
+        } catch(ex) {
+            console.info(`Failed to iterate`);
+        }
 
         res.json({
             success: code === 0,
