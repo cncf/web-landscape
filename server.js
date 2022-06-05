@@ -91,7 +91,7 @@ async function cleanup() {
 }
 
 async function autoUpdate() {
-    const autoUpdatePid = childProcess.spawn('bash', ['-c', ` git pull && yarn`], {
+    const autoUpdatePid = childProcess.spawn('bash', ['-c', `git fetch && git reset --hard origin/master && yarn`], {
         cwd: path.resolve(landscapeAppFolder),
         stdio: 'inherit'
     });
