@@ -452,6 +452,83 @@ app.use('/landscape', function(req, res) {
     }
 });
 
+// support command line
+app.post('/api/console/ids', async function(req, res) {
+    await fs.mkdir('tmp-objects', { recursive: true});
+    const existingFiles = (await fs.readdir('tmp-objects'));
+    const existingSet = new Set(existingFiles);
+    const ids = req.body.ids;
+    const existingIds = ids.filter( (x) => existingSet.has(x));
+    console.info({existingIds});
+    res.json({existingIds});
+});
+app.post('/api/console/preview', async function(req, res) {
+    await fs.mkdir('tmp-objects', { recursive: true});
+    const existingFiles = (await fs.readdir('tmp-objects'));
+    const existingSet = new Set(existingFiles);
+
+    const tmpName = Math.random() + ':' + new Date().getTime();
+    const previewPath = path.resolve(tmpFolder, tmpName);
+    await fs.mkdir(previewPath, { recursive: true});
+
+    await fs.mkdir(path.join(previewPath, 'hosted_logos'));
+    await fs.mkdir(path.join(previewPath, 'cached_logos'));
+    await fs.mkdir(path.join(previewPath, 'images'));
+    for (let file of req.body.files) {
+        const fullPath = path.resolve(previewPath, file.file);
+        if (!existingSet.has(file.md5)) {
+            await fs.writeFile(path.resolve('tmp-objects', file.md5),  Buffer.from(file.content, 'base64'));
+        }
+        await fs.copyFile(path.resolve('tmp-objects', file.md5), fullPath);
+    }
+
+    // now run preview
+    const cmd = `FORCE_COLOR=0 PROJECT_PATH=${previewPath} yarn preview`;
+    const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: landscapeAppFolder, detached: true });
+
+    let output = '';
+    pid.stdout.on('data', (data) => {
+        console.info(data.toString());
+        output += data.toString();
+    });
+    pid.stderr.on('data', (data) => {
+        output += data.toString();
+    });
+    pid.on('close', async (code) => {
+        let generatedFiles = [];
+        const distPath = path.resolve(previewPath, 'dist');
+        // whole dist should be returned here!
+        const iterate = async function(baseDir) {
+            const files = await fs.readdir(path.join(distPath, baseDir));
+            for (let file of files) {
+                if (file === '.' || file === '..') {
+                    continue;
+                }
+                const stat = await fs.lstat(path.join(distPath, baseDir, file));
+                if (stat.isDirectory()) {
+                    await iterate(path.join(baseDir, file));
+                } else {
+                    const content = await fs.readFile(path.join(distPath, baseDir, file), { encoding: 'base64'});
+                    generatedFiles.push({
+                        file: path.join(baseDir, file),
+                        content: content,
+                        md5: require('crypto').createHash('md5').update(content).digest("hex")
+                    });
+                }
+            }
+        }
+        await iterate('.');
+
+        res.json({
+            success: code === 0,
+            output: output,
+            files: generatedFiles
+        });
+        await fs.rm(previewPath, { recursive: true, force: true});
+    });
+
+});
+
 app.use(function (err, req, res, next) {
   console.error(err.stack)
   res.status(500).send('Something broke!')

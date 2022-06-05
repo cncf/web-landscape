@@ -1,6 +1,7 @@
 node_modules
 tmp
 tmp-landscapes
+tmp-objects
 logs
 # Mac files
 .DS_Store
