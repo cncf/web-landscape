@@ -453,6 +453,38 @@ app.use('/landscape', function(req, res) {
 });
 
 // support command line
+app.use('/api/console/download', function(req, res) {
+    const root = path.resolve('tmp');
+    const fnFile = (file) => {
+        const dir = req.url.split('/')[1];
+        return path.join('tmp', dir, 'dist/functions', file);
+    }
+    if (req.url.indexOf('/api/ids') !== -1) {
+        const query = req.url.split('?')[1] || '';
+        console.log('api request starting...', req.url, query);
+        require('child_process').exec(`node ${fnFile("ids.js")} '${query}'`, {}, function(e, output, err) {
+            console.info(err);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(output);
+        });
+        return;
+    }
+    if (req.url.indexOf('/api/export') !== -1) {
+        console.log('api request starting...', req.url);
+        const query = req.url.split('?')[1] || '';
+        require('child_process').exec(`node ${fnFile("export.js")} '${query}'`, {}, function(e, output, err) {
+            console.info(err);
+            res.writeHead(200, {
+                'Content-Type': 'text/css',
+                'Content-Disposition': 'attachment; filename=interactive-landscape.csv'
+            });
+            res.end(output);
+        });
+        return;
+    }
+    send(req, parseUrl(req).pathname.replace('/api/console/download', ''), { root }).pipe(res);
+});
+
 app.post('/api/console/ids', async function(req, res) {
     await fs.mkdir('tmp-objects', { recursive: true});
     const existingFiles = (await fs.readdir('tmp-objects'));
@@ -492,45 +524,26 @@ app.post('/api/console/preview', async function(req, res) {
         output += data.toString();
     });
     pid.stderr.on('data', (data) => {
-        console.info(data.toString());
+        console.info("ERR: " +data.toString());
         output += data.toString();
     });
     pid.on('close', async (code) => {
-        let generatedFiles = [];
-        const distPath = path.resolve(previewPath, 'dist');
-        console.info({distPath});
-        // whole dist should be returned here!
-        const iterate = async function(baseDir) {
-            const files = await fs.readdir(path.join(distPath, baseDir));
-            for (let file of files) {
-                if (file === '.' || file === '..') {
-                    continue;
-                }
-                const stat = await fs.lstat(path.join(distPath, baseDir, file));
-                if (stat.isDirectory()) {
-                    await iterate(path.join(baseDir, file));
-                } else {
-                    const content = await fs.readFile(path.join(distPath, baseDir, file), { encoding: 'base64'});
-                    generatedFiles.push({
-                        file: path.join(baseDir, file),
-                        content: content,
-                        md5: require('crypto').createHash('md5').update(content).digest("hex")
-                    });
-                }
-            }
+        console.info(code, tmpName);
+        if (code !== 0) {
+            res.json({
+                success: false,
+                output: output
+            });
+            fs.rm(previewPath, { recursive: true, force: true});
+        } else {
+            res.json({
+                success: true,
+                path: tmpName
+            });
+            setTimeout(function() {
+                fs.rm(previewPath, { recursive: true, force: true});
+            }, 3600 * 1000);
         }
-        try {
-            await iterate('.');
-        } catch(ex) {
-            console.info(`Failed to iterate`);
-        }
-
-        res.json({
-            success: code === 0,
-            output: output,
-            files: generatedFiles
-        });
-        await fs.rm(previewPath, { recursive: true, force: true});
     });
 
 });
