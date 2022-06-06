@@ -552,7 +552,12 @@ webSocketServer.on("connection", (webSocket) => {
     console.info("Total connected clients:", Object.keys(webSocketServer.allClients));
 });
 
-server.listen(httpsInfo ? 443 : process.env.PORT || 3000);
+if (httpsInfo) {
+    server.listen(443);
+    require('http').createServer(app);
+} else {
+    server.listen(process.env.PORT || 3000);
+}
 
 // autocleanup everything regularly
 cleanup();
