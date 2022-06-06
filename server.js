@@ -453,7 +453,7 @@ app.use('/landscape', function(req, res) {
 });
 
 // support command line
-app.use('/api/console/download', function(req, res) {
+app.use('/api/console/download', async function(req, res) {
     const root = path.resolve('tmp');
     const fnFile = (file) => {
         const dir = req.url.split('/')[1];
@@ -482,7 +482,16 @@ app.use('/api/console/download', function(req, res) {
         });
         return;
     }
-    send(req, parseUrl(req).pathname.replace('/api/console/download', ''), { root }).pipe(res);
+    // check
+    let newPath = parseUrl(req).pathname.replace('/api/console/download', '');
+    try {
+        let newPath2 = newPath + '.html';
+        await fs.readFile(path.join('tmp', newPath2));
+        newPath = newPath2;
+    } catch(ex) {
+
+    }
+    send(req, newPath , { root }).pipe(res);
 });
 
 app.post('/api/console/ids', async function(req, res) {
