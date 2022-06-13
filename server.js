@@ -491,7 +491,7 @@ app.use('/api/console/download', async function(req, res) {
     } catch(ex) {
 
     }
-    send(req, newPath , { root }).pipe(res);
+    res.writeHead(200, {'X-Accel-Redirect', `/files/tmp/${parseUrl(req).path}`});
 });
 
 app.post('/api/console/ids', async function(req, res) {
