@@ -454,7 +454,6 @@ app.use('/landscape', function(req, res) {
 
 // support command line
 app.use('/api/console/download', async function(req, res) {
-    const root = path.resolve('tmp');
     const fnFile = (file) => {
         const dir = req.url.split('/')[1];
         return path.join('tmp', dir, 'dist/functions', file);
@@ -484,7 +483,7 @@ app.use('/api/console/download', async function(req, res) {
     }
     // check
     let newPath = parseUrl(req).pathname.replace('/api/console/download', '');
-    res.writeHead(200, {'X-Accel-Redirect': `/files/tmp${parseUrl(req).path}`});
+    res.writeHead(200, {'X-Accel-Redirect': `/files${parseUrl(req).path}`});
     res.end();
 });
 
