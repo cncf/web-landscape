@@ -563,8 +563,9 @@ app.use(function (err, req, res, next) {
 })
 
 
-const server = httpsInfo ? require('https').createServer(httpsInfo, app) : require('http').createServer(app);
-const webSocketServer = new WebSocket.Server({ server });
+const server1 = require('http').createServer(app);
+
+const webSocketServer = new WebSocket.Server({server: server1 });
 webSocketServer.allClients = {};
 webSocketServer.on("connection", (webSocket) => {
     const id = Math.random() + ':' + new Date().getTime();
@@ -573,12 +574,19 @@ webSocketServer.on("connection", (webSocket) => {
     webSocketServer.allClients[id] = webSocket;
     console.info("Total connected clients:", Object.keys(webSocketServer.allClients));
 });
+server1.listen(process.env.PORT || 3000);
 
 if (httpsInfo) {
-    server.listen(443);
-    require('http').createServer(app);
-} else {
-    server.listen(process.env.PORT || 3000);
+    const server2 = require('https').createServer(httpsInfo, app);
+    const webSocketServer2 = new WebSocket.Server({server: server2 });
+    webSocketServer2.on("connection", (webSocket) => {
+        const id = Math.random() + ':' + new Date().getTime();
+        webSocket.send(JSON.stringify({type: "id", id })); 
+        webSocket.internalId = id;
+        webSocketServer.allClients[id] = webSocket;
+        console.info("Total connected clients:", Object.keys(webSocketServer.allClients));
+    });
+    server2.listen(443);
 }
 
 // autocleanup everything regularly
