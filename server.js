@@ -442,7 +442,8 @@ app.use('/landscape', function(req, res) {
     } else {
         // root is tmp/${socketId}/landscapeapp/out
         const root = path.join(socketId, 'preview', 'dist', 'landscape');
-        res.writeHead(200, {'X-Accel-Redirect': '/files' + path.join(root, parseUrl(req).pathname.replace('/landscape', ''))});
+        res.writeHead(200, {'X-Accel-Redirect': `/files/${socketId}/preview/dist` +
+            parseUrl(req).pathname});
         res.end();
     }
 });
