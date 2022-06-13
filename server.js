@@ -441,8 +441,9 @@ app.use('/landscape', function(req, res) {
         res.end('<h1>Server is not ready</h1>');
     } else {
         // root is tmp/${socketId}/landscapeapp/out
-        const root = path.resolve('tmp', socketId, 'preview', 'dist', 'landscape');
-        send(req, parseUrl(req).pathname.replace('/landscape', ''), { root }).pipe(res)
+        const root = path.join(socketId, 'preview', 'dist', 'landscape');
+        res.writeHead(200, {'X-Accel-Redirect': '/files' + path.join(root, parseUrl(req).pathname.replace('/landscape', ''))});
+        res.end();
     }
 });
 
