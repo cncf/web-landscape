@@ -484,14 +484,7 @@ app.use('/api/console/download', async function(req, res) {
     }
     // check
     let newPath = parseUrl(req).pathname.replace('/api/console/download', '');
-    try {
-        let newPath2 = newPath + '.html';
-        await fs.readFile(path.join('tmp', newPath2));
-        newPath = newPath2;
-    } catch(ex) {
-
-    }
-    res.writeHead(200, {'X-Accel-Redirect', `/files/tmp/${parseUrl(req).path}`});
+    res.writeHead(200, {'X-Accel-Redirect': `/files/tmp/${parseUrl(req).path}`});
 });
 
 app.post('/api/console/ids', async function(req, res) {
