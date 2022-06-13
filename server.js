@@ -23,12 +23,6 @@ const maxTimeoutInMinutes = 720;
 
 const serverData = {}; // builds for every socket
 
-const httpsInfo = process.env.DOMAIN ? {
-    key: require('fs').readFileSync(`/etc/letsencrypt/live/${process.env.DOMAIN}/privkey.pem`, 'utf-8'),
-    cert: require('fs').readFileSync(`/etc/letsencrypt/live/${process.env.DOMAIN}/cert.pem`, 'utf-8'),
-    ca: require('fs').readFileSync(`/etc/letsencrypt/live/${process.env.DOMAIN}/chain.pem`, 'utf-8')
-} : null;
-
 require('fs').mkdirSync(tmpFolder, { recursive: true });
 
 const githubRepoLandscapes = `
@@ -568,19 +562,6 @@ webSocketServer.on("connection", (webSocket) => {
     console.info("Total connected clients:", Object.keys(webSocketServer.allClients));
 });
 server1.listen(process.env.PORT || 3000);
-
-if (httpsInfo) {
-    const server2 = require('https').createServer(httpsInfo, app);
-    const webSocketServer2 = new WebSocket.Server({server: server2 });
-    webSocketServer2.on("connection", (webSocket) => {
-        const id = Math.random() + ':' + new Date().getTime();
-        webSocket.send(JSON.stringify({type: "id", id })); 
-        webSocket.internalId = id;
-        webSocketServer.allClients[id] = webSocket;
-        console.info("Total connected clients:", Object.keys(webSocketServer.allClients));
-    });
-    server2.listen(443);
-}
 
 // autocleanup everything regularly
 cleanup();

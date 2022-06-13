@@ -4,5 +4,6 @@ ssh -t root@86.109.11.205 <<'EOL'
   yarn
   pm2 stop all
   pm2 start
+  service nginx restart
 EOL
 
