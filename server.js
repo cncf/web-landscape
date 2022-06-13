@@ -485,6 +485,7 @@ app.use('/api/console/download', async function(req, res) {
     // check
     let newPath = parseUrl(req).pathname.replace('/api/console/download', '');
     res.writeHead(200, {'X-Accel-Redirect': `/files/tmp/${parseUrl(req).path}`});
+    res.end();
 });
 
 app.post('/api/console/ids', async function(req, res) {
