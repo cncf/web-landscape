@@ -604,7 +604,7 @@ async function loadYmlFiles() {
     let prevMatch = matchItem.exec(landscapeYmlContent);
     for (var category of content.landscape) {
         for (var subcategory of category.subcategories) {
-            for (var item of subcategory.items) {
+            for (var item of subcategory.items || []) {
                 const currentMatch = matchItem.exec(landscapeYmlContent) || { index: 100000000};
                 const originStr = landscapeYmlContent.substring(prevMatch.index, currentMatch.index);
                 prevMatch = currentMatch;
@@ -629,37 +629,35 @@ async function loadYmlFiles() {
 
 }
 
-function prepareLandscapeYmlFromStore(store) {
+function prepareLandscapeYmlFromStore({store, landscape }) {
     const rows = store.getRange();
-    const newContent = { landscape: [] };
-    const categories = {};
-    const subcategories = {};
+
+    // take categories and subcategories from the landscape
+    const categories = landscape.map( (x) => ({
+        category: '',
+        name: x.name,
+        subcategories: x.subcategories.map( (y) => ({
+            subcategory: '',
+            name: y.name,
+            items: []
+        }))
+    }));
+    const newContent = { landscape: categories };
+
+    const categoriesHash = {};
+    const subcategoriesHash = {};
 
     for (var record of rows) {
         const categoryKey = record.get('category');
-        if (!categories[categoryKey]) {
-            categories[categoryKey] = {
-                category: '',
-                name: categoryKey,
-                subcategories: []
-            }
-            newContent.landscape.push(categories[categoryKey]);
-        }
         const subcategoryKey = `${record.get('category')}:${record.get('subcategory')}`;
-        if (!subcategories[subcategoryKey]) {
-            subcategories[subcategoryKey] = {
-                subcategory: '',
-                name: record.get('subcategory'),
-                items: []
-            }
-            categories[categoryKey].subcategories.push(subcategories[subcategoryKey]);
-        }
-
+        categoriesHash[categoryKey] = categoriesHash[categoryKey] || Object.values(categories).find( (x) => x.name === record.get('category'));
+        const category = categoriesHash[categoryKey];
+        subcategoriesHash[subcategoryKey] = subcategoriesHash[subcategoryKey] || Object.values(category.subcategories).find( (x) => x.name === record.get('subcategory'));
+        const subcategory = subcategoriesHash[subcategoryKey];
         const item = record.get('original') || {
             item: ''
         };
         const source = record.get('source') || '';
-
         for (var key of allowedKeys) {
             const value = record.get(key);
             if (value !== '') {
@@ -671,24 +669,22 @@ function prepareLandscapeYmlFromStore(store) {
                 delete item[key];
             }
         }
-
-        subcategories[subcategoryKey].items.push(item);
-
+        subcategory.items.push(item);
     }
 
     const yml = yaml2json(newContent);
     return yml;
 }
 
-async function saveChanges(store) {
-    const yml = prepareLandscapeYmlFromStore(store);
+async function saveChanges({store, landscape}) {
+    const yml = prepareLandscapeYmlFromStore({store, landscape});
     Ext.Msg.wait('Saving landscape.yml');
     await activeBackend.writeFile({name: 'landscape.yml', content: yml});
     Ext.Msg.hide();
 }
 
-async function savePreview(store) {
-    const yml = prepareLandscapeYmlFromStore(store);
+async function savePreview({store, landscape}) {
+    const yml = prepareLandscapeYmlFromStore({store, landscape});
     await activeBackend.writePreview({name: 'landscape.yml', content: yml });
 }
 
@@ -3655,7 +3651,7 @@ function getLandscapeYmlEditor() {
                 this.on('afterrender', () => this.loadData());
             } else {
                 store.loadData(data.items);
-                subscribeStore;
+                subscribeStore();
                 this.down('[name=category]').store.loadData(data.landscape.map( (x) => ({ id: x.name, name: x.name })));
                 this.down('[name=project]').store.loadData([{id: '', name: '(no project)'}].concat(data.projects));
                 const selectedItemId = window.localStorage.getItem('selected-' + window.activeBackend.getDescription());
@@ -3680,7 +3676,7 @@ function getLandscapeYmlEditor() {
             new Ext.Button({
                 xtype: 'button',
                 text: 'Save landscape.yml',
-                handler: () => saveChanges(store),
+                handler: () => saveChanges({store, landscape: mainContainer.data.landscape}),
                 scale: 'medium'
             })
         );
@@ -3697,7 +3693,7 @@ function getLandscapeYmlEditor() {
         }
     });
     mainContainer.on('afterrender', () => checkSelection(), this, { delay: 1});
-    mainContainer.on('save-preview', () => savePreview(store), null, { buffer: 1000 });
+    mainContainer.on('save-preview', () => savePreview({store, landscape: mainContainer.data.landscape }), null, { buffer: 1000 });
 
 
     function updateSubcategoryList() {
@@ -3885,26 +3881,6 @@ After adding a new category or subcategory - close this modal window and add at 
             } else {
                 const storeCategories = this.down('#categories').store;
                 const storeSubcategories = this.down('#subcategories').store;
-
-                // data is just records
-                // const categories = {};
-                // for (var item of data) {
-                // if (!categories[item.get('category')]) {
-                // categories[item.get('category')] = {
-                // name: item.get('category'),
-                // subcategories: {}
-                // }
-                // }
-                // const category = categories[item.get('category')];
-                // if (!category.subcategories[item.get('subcategory')]) {
-                // category.subcategories[item.get('subcategory')] = {
-                // name: item.get('subcategory'),
-                // items: []
-                // }
-                // }
-                // const subcategory = category.subcategories[item.get('subcategory')];
-                // subcategory.items.push(item);
-                // }
 
                 storeCategories.loadData(data.landscape.map( (x) => ({ id: x.name, name: x.name, children: x.subcategories })));
             }
