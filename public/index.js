@@ -3770,7 +3770,7 @@ function getCategoriesEditor() {
             html: ` <pre style="color: white;">
 Here you can add, rename and delete categories and subcategores.  Double click on category or subcategory to change the name.
 Click once to select a row, then choose a 'Delete' button to delete an item or 'New' to add one
-After adding a new category or subcategory - close this modal window and add at least one item to the new category/subcategory
+After adding a new category or subcategory - close this modal window
               </pre> `,
             items: [{
                 xtype: 'button',
