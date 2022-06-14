@@ -1551,6 +1551,10 @@ function getSettingsYmlEditor() {
                 const values = originalValue.split('\n').filter( (x) => x.trim()).map( (x) => x.trim()).filter( (x) => !!x).map( (x) => (x));
                 const result = values;
                 return result.length > 0 ? result : '';
+            },
+            fieldStyle: {
+                'fontSize': '10px',
+                'font-size': '10px'
             }
         }, {
             xtype: 'textarea',
@@ -1567,6 +1571,10 @@ function getSettingsYmlEditor() {
                 const values = originalValue.split('\n').filter( (x) => x.trim()).map( (x) => x.trim()).filter( (x) => !!x).map( (x) => (x));
                 const result = values;
                 return result.length > 0 ? result : '';
+            },
+            fieldStyle: {
+                'fontSize': '10px',
+                'font-size': '10px'
             }
         }]
     });
@@ -3441,6 +3449,10 @@ function getLandscapeYmlEditor() {
                     const repos = originalValue.split('\n').filter( (x) => x.trim()).map( (x) => x.trim()).filter( (x) => !!x).map( (x) => x.replace('https://github.com/', ''));
                     const result = repos.map( (repo) => ({repo_url: `https://github.com/${repo}`}));
                     return result.length > 0 ? result : '';
+                },
+                fieldStyle: {
+                    'fontSize': '10px',
+                    'font-size': '10px'
                 }
             }, {
                 xtype: 'textfield',
@@ -3572,6 +3584,10 @@ function getLandscapeYmlEditor() {
                         result[key] = value;
                     }
                     return lines.length > 0 ? result : ''
+                },
+                fieldStyle: {
+                    'fontSize': '10px',
+                    'font-size': '10px'
                 }
             }]
     });
