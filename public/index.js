@@ -3265,6 +3265,10 @@ function getLandscapeYmlEditor() {
                     const originalValue = Ext.form.field.TextArea.prototype.getValue.call(this);
                     const lines = originalValue.split('\n').filter( (x) => x.trim()).map( (x) => x.trim()).filter( (x) => !!x).map( (x) => x.split('/').map( (x) => x.trim()).join(' / '));
                     return lines.length > 1 ? lines : lines.length === 1 ? lines[0] : '';
+                },
+                fieldStyle: {
+                    'fontSize': '10px',
+                    'font-size': '10px'
                 }
             }, {
                 xtype: 'textfield',
