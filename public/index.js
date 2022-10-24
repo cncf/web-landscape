@@ -714,6 +714,86 @@ const defaultEditorSettings = {
     }
 };
 
+function getSummaryEditor() {
+    const panel = new Ext.Panel({
+        items: [{
+            xtype: 'container',
+            layout: 'absolute',
+            items: [{
+                xtype: 'button',
+                text: 'x',
+                x: 1010,
+                y: 5,
+                handler: function() {
+                    panel.fireEvent('close');
+                }
+            }],
+            height: 10
+        }, {
+            ...defaultEditorSettings,
+            xtype: 'container',
+            title: 'Edit Summary Fields',
+            items: [{
+                xtype: 'box',
+                width: 700,
+                html: `<h1>Please enter summary fields for the selected item</h1>`
+            }, {
+                xtype: 'textarea',
+                fieldLabel: 'Personas',
+                name: 'summary_personas'
+            }, {
+                xtype: 'textarea',
+                fieldLabel: 'Tags (split by comma)',
+                name: 'summary_tags'
+            }, {
+                xtype: 'textarea',
+                fieldLabel: 'Use case',
+                name: 'summary_use_case'
+            }, {
+                xtype: 'textarea',
+                fieldLabel: 'Business use case',
+                name: 'summary_business_use_case'
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'Release Rate',
+                name: 'summary_release_rate'
+            }, {
+                xtype: 'textarea',
+                fieldLabel: 'Integration',
+                name: 'summary_integration'
+            }, {
+                xtype: 'textfield',
+                fieldLabel: 'Intro Url',
+                name: 'summary_intro_url'
+            }]}, {
+                xtype: 'container',
+                layout: 'absolute',
+                items: [{
+                    xtype: 'button',
+                    text: 'apply',
+                    scale: 'large',
+                    width: 80,
+                    x: 950,
+                    y: -8,
+                    handler: function() {
+                      const items = panel.queryBy( (x) => !!x.name);
+                      const result = items.map( (x) => ({ name: x.name, value: x.getValue() }));
+                      panel.fireEvent('submit', result);
+                    }
+                }]
+            }]
+    });
+    panel.loadValues = function(items) {
+        items.forEach(function(item) {
+            const field = panel.queryBy( (x) => x.name === item.name)[0];
+            if (field) {
+                field.setValue(item.value);
+            }
+        });
+    }
+    return panel;
+}
+
 function getBigPictureEditor() {
 
     const makeElements = function() {
@@ -1331,7 +1411,7 @@ function getBigPictureEditor() {
                         },
                         height: 20
                     }]
-            }],
+                }],
             setValue: function(v) {
                 panel.value = v;
                 for (var key in v) {
@@ -2472,10 +2552,10 @@ function getSettingsYmlEditor() {
             align: 'stretch'
         },
         items: [{
-              xtype: 'box',
-              margin: 5,
-              html: `This is a prerender section. It allows you to specify which pages with given filters and options you want to prerender, this way a page is rendered as html and can be displayed significantly faster`
-            },{
+            xtype: 'box',
+            margin: 5,
+            html: `This is a prerender section. It allows you to specify which pages with given filters and options you want to prerender, this way a page is rendered as html and can be displayed significantly faster`
+        },{
             xtype: 'container',
             ignoreAssignment: true,
             name: '.',
@@ -2595,10 +2675,10 @@ function getSettingsYmlEditor() {
             align: 'stretch'
         },
         items: [{
-              xtype: 'box',
-              margin: 5,
-              html: `This is an export section. It allows you to specify which data will be stored as json files `
-            },{
+            xtype: 'box',
+            margin: 5,
+            html: `This is an export section. It allows you to specify which data will be stored as json files `
+        },{
             xtype: 'container',
             ignoreAssignment: true,
             name: '.',
@@ -2872,136 +2952,136 @@ function getLandscapeYmlEditor() {
     }
 
     const tbar = [{
-            xtype: 'button',
-            text: 'Add new item',
-            handler: function() {
-                const selectedRecord = sm.getSelection()[0];
-                const newEntry = {
-                    category: selectedRecord ? selectedRecord.get('category') : '',
-                    subcategory: selectedRecord ? selectedRecord.get('subcategory') : ''
-                }
-                const record = store.add(newEntry);
-                sm.select(record);
+        xtype: 'button',
+        text: 'Add new item',
+        handler: function() {
+            const selectedRecord = sm.getSelection()[0];
+            const newEntry = {
+                category: selectedRecord ? selectedRecord.get('category') : '',
+                subcategory: selectedRecord ? selectedRecord.get('subcategory') : ''
             }
-        }, '-', {
-            xtype: 'button',
-            text: 'Delete item',
-            handler: function() {
-                const record = sm.getSelection()[0];
-                if (record) {
-                    record.store.remove(record);
-                }
+            const record = store.add(newEntry);
+            sm.select(record);
+        }
+    }, '-', {
+        xtype: 'button',
+        text: 'Delete item',
+        handler: function() {
+            const record = sm.getSelection()[0];
+            if (record) {
+                record.store.remove(record);
             }
-        }, '-', {
-            xtype: 'button',
-            text: 'Categories / Subcategories editor',
-            handler: () => {
-                const panel = getCategoriesEditor();
-                const wnd = new Ext.Window({
-                    header: false,
-                    modal: true,
-                    minimizable: false,
-                    maximizable: false,
-                    resizable: false,
-                    width: 1050, 
-                    height: 600,
-                    layout: 'fit',
-                    items: [panel]
-                });
+        }
+    }, '-', {
+        xtype: 'button',
+        text: 'Categories / Subcategories editor',
+        handler: () => {
+            const panel = getCategoriesEditor();
+            const wnd = new Ext.Window({
+                header: false,
+                modal: true,
+                minimizable: false,
+                maximizable: false,
+                resizable: false,
+                width: 1050, 
+                height: 600,
+                layout: 'fit',
+                items: [panel]
+            });
 
-                panel.on('category-renamed', ({from, to}) => {
-                    const category = mainContainer.data.landscape.filter( (x) => x.name === from )[0];
-                    const categorySelector = mainContainer.down('[name=category]');
-                    category.name = to;
-                    categorySelector.store.loadData(mainContainer.data.landscape.map( (x) => ({ id: x.name, name: x.name })));
-                    if (categorySelector.getValue() === from) {
-                        categorySelector.setValue(to);
+            panel.on('category-renamed', ({from, to}) => {
+                const category = mainContainer.data.landscape.filter( (x) => x.name === from )[0];
+                const categorySelector = mainContainer.down('[name=category]');
+                category.name = to;
+                categorySelector.store.loadData(mainContainer.data.landscape.map( (x) => ({ id: x.name, name: x.name })));
+                if (categorySelector.getValue() === from) {
+                    categorySelector.setValue(to);
+                }
+                for (let record of store.getRange()) {
+                    if (record.get('category') === from) {
+                        record.set('category', to);
+                        record.commit();
                     }
-                    for (let record of store.getRange()) {
-                        if (record.get('category') === from) {
-                            record.set('category', to);
-                            record.commit();
-                        }
+                }
+            });
+
+            panel.on('subcategory-renamed', ({category, from, to}) => {
+                const categoryEntry = mainContainer.data.landscape.filter( (x) => x.name === category )[0];
+                const subcategory = categoryEntry.subcategories.filter( (x) => x.name === from )[0];
+                subcategory.name = to;
+                const categorySelector = mainContainer.down('[name=category]');
+                const subcategorySelector = mainContainer.down('[name=subcategory]');
+                if (categorySelector.getValue() === category) {
+                    if (subcategorySelector.getValue() === from) {
+                        updateSubcategoryList();
+                        subcategorySelector.setValue(to);
+                    } else {
+                        updateSubcategoryList();
                     }
-                });
+                }
 
-                panel.on('subcategory-renamed', ({category, from, to}) => {
-                    const categoryEntry = mainContainer.data.landscape.filter( (x) => x.name === category )[0];
-                    const subcategory = categoryEntry.subcategories.filter( (x) => x.name === from )[0];
-                    subcategory.name = to;
-                    const categorySelector = mainContainer.down('[name=category]');
-                    const subcategorySelector = mainContainer.down('[name=subcategory]');
-                    if (categorySelector.getValue() === category) {
-                        if (subcategorySelector.getValue() === from) {
-                            updateSubcategoryList();
-                            subcategorySelector.setValue(to);
-                        } else {
-                            updateSubcategoryList();
-                        }
+                for (let record of store.getRange()) {
+                    if (record.get('category') === category && record.get('subcategory') === from) {
+                        record.set('subcategory', to);
+                        record.commit();
                     }
+                }
+            });
 
-                    for (let record of store.getRange()) {
-                        if (record.get('category') === category && record.get('subcategory') === from) {
-                            record.set('subcategory', to);
-                            record.commit();
-                        }
+            panel.on('category-added', ({category}) => {
+                mainContainer.data.landscape.push({ name: category, subcategories: [] });
+                const categorySelector = mainContainer.down('[name=category]');
+                categorySelector.store.loadData(mainContainer.data.landscape.map( (x) => ({ id: x.name, name: x.name })));
+            });
+
+            panel.on('category-removed', ({category}) => {
+                mainContainer.data.landscape = mainContainer.data.landscape.filter( (x) => x.name !== category);
+                const categorySelector = mainContainer.down('[name=category]');
+                categorySelector.store.loadData(mainContainer.data.landscape.map( (x) => ({ id: x.name, name: x.name })));
+                if (categorySelector.getValue() === category) {
+                    categorySelector.setValue('');
+                    updateSubcategoryList();
+                }
+                for (let record of store.getRange()) {
+                    if (record.get('category') === category) {
+                        store.remove(record);
                     }
-                });
+                }
+            });
 
-                panel.on('category-added', ({category}) => {
-                    mainContainer.data.landscape.push({ name: category, subcategories: [] });
-                    const categorySelector = mainContainer.down('[name=category]');
-                    categorySelector.store.loadData(mainContainer.data.landscape.map( (x) => ({ id: x.name, name: x.name })));
-                });
+            panel.on('subcategory-added', ({category, subcategory}) => {
+                const categoryEntry = mainContainer.data.landscape.filter( (x) => x.name === category )[0];
+                categoryEntry.subcategories.push({ name: subcategory, items: [] });
+                const categorySelector = mainContainer.down('[name=category]');
+                if (categorySelector.getValue() === category) {
+                    updateSubcategoryList();
+                }
+            });
 
-                panel.on('category-removed', ({category}) => {
-                    mainContainer.data.landscape = mainContainer.data.landscape.filter( (x) => x.name !== category);
-                    const categorySelector = mainContainer.down('[name=category]');
-                    categorySelector.store.loadData(mainContainer.data.landscape.map( (x) => ({ id: x.name, name: x.name })));
-                    if (categorySelector.getValue() === category) {
+            panel.on('subcategory-removed', ({category, subcategory}) => {
+                const categoryEntry = mainContainer.data.landscape.filter( (x) => x.name === category )[0];
+                categoryEntry.subcategories = categoryEntry.subcategories.filter( (x) => x.name !== subcategory)
+
+                const categorySelector = mainContainer.down('[name=category]');
+                const subcategorySelector = mainContainer.down('[name=subcategory]');
+
+                if (categorySelector.getValue() === category) {
+                    updateSubcategoryList();
+                    if (subcategorySelector.getValue() === subcategory) {
                         categorySelector.setValue('');
-                        updateSubcategoryList();
                     }
-                    for (let record of store.getRange()) {
-                        if (record.get('category') === category) {
-                            store.remove(record);
-                        }
+                }
+                for (let record of store.getRange()) {
+                    if (record.get('category') === category && record.get('subcategory') === subcategory) {
+                        store.remove(record);
                     }
-                });
+                }
+            });
 
-                panel.on('subcategory-added', ({category, subcategory}) => {
-                    const categoryEntry = mainContainer.data.landscape.filter( (x) => x.name === category )[0];
-                    categoryEntry.subcategories.push({ name: subcategory, items: [] });
-                    const categorySelector = mainContainer.down('[name=category]');
-                    if (categorySelector.getValue() === category) {
-                        updateSubcategoryList();
-                    }
-                });
-
-                panel.on('subcategory-removed', ({category, subcategory}) => {
-                    const categoryEntry = mainContainer.data.landscape.filter( (x) => x.name === category )[0];
-                    categoryEntry.subcategories = categoryEntry.subcategories.filter( (x) => x.name !== subcategory)
-
-                    const categorySelector = mainContainer.down('[name=category]');
-                    const subcategorySelector = mainContainer.down('[name=subcategory]');
-
-                    if (categorySelector.getValue() === category) {
-                        updateSubcategoryList();
-                        if (subcategorySelector.getValue() === subcategory) {
-                            categorySelector.setValue('');
-                        }
-                    }
-                    for (let record of store.getRange()) {
-                        if (record.get('category') === category && record.get('subcategory') === subcategory) {
-                            store.remove(record);
-                        }
-                    }
-                });
-
-                wnd.show();
-                panel.loadData(mainContainer.data);
-            }
-        }];
+            wnd.show();
+            panel.loadData(mainContainer.data);
+        }
+    }];
 
     const grid = new Ext.grid.Panel({
         flex: 1,
@@ -3554,9 +3634,40 @@ function getLandscapeYmlEditor() {
                 xtype: 'box',
                 html: `<div><label class="x-form-item-label x-form-item-label-left">Extra:</label></div>`
             }, {
+                xtype: 'button',
+                itemId: 'summaryButton',
+                summaryValue: [],
+                text: 'Edit Summary',
+                handler: function() {
+                    const panel = getSummaryEditor();
+                    const wnd = new Ext.Window({
+                        header: false,
+                        modal: true,
+                        closeable: true,
+                        minimizable: false,
+                        maximizable: false,
+                        resizable: false,
+                        width: 1050, 
+                        height: 600,
+                        layout: 'fit',
+                        items: [panel]
+                    });
+                    const extraFields = Ext.ComponentQuery.query('textarea[name=extra]')[0];
+                    panel.loadValues(extraFields.summaryValue);
+                    panel.on('close', function() {
+                        wnd.close();
+                    });
+                    panel.on('submit', function(values) {
+                        extraFields.summaryValue = values;
+                        wnd.close();
+                    });
+                    wnd.show();
+                }
+            }, {
                 xtype: 'textarea',
                 grow: true,
                 name: 'extra',
+                summaryValue: [],
                 description: `
                    extra fields can be added, please use this format: <pre>
                        my_field_name: asdf
@@ -3565,11 +3676,16 @@ function getLandscapeYmlEditor() {
                 setValue: function(v) {
                     if (!v || v.length === 0) {
                         Ext.form.field.TextArea.prototype.setValue.call(this, '')
+                        this.summaryValue = [];
                     } else {
-                        const lines = Object.keys(v).map(function(key) {
-                            const value = v[key];
-                            return `${key}: ${value}`;
+                        const allLines = Object.keys(v).map( (k) => ({ name: k, value: v[k] }));
+                        const normalLines = allLines.filter( (x) => x.name.indexOf('summary_') !== 0);
+                        const summaryLines = allLines.filter( (x) => x.name.indexOf('summary_') === 0);
+
+                        const lines = normalLines.map(function(x) {
+                            return `${x.name}: ${x.value}`;
                         }).join('\n');
+                        this.summaryValue = summaryLines;
                         Ext.form.field.TextArea.prototype.setValue.call(this, lines);
                     }
                 },
@@ -3582,6 +3698,9 @@ function getLandscapeYmlEditor() {
                         const key = line.substring(0, colonIndex);
                         const value =  line.substring(colonIndex + 1).trim();
                         result[key] = value;
+                    }
+                    for (let summaryLine of this.summaryValue) {
+                        result[summaryLine.name] = summaryLine.value;
                     }
                     return lines.length > 0 ? result : ''
                 },
