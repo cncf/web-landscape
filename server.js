@@ -273,7 +273,7 @@ app.post('/api/upload-file', async function(req, res) {
     if (!isPreview) {
         await updatePreview({socketId, dir: req.body.dir, name: req.body.name });
 
-        const cmd = `git add . && git commit -m 'update ${req.body.name}' && (git push copy HEAD || git push origin HEAD)`;
+        const cmd = `git add . && git commit -s -m 'update ${req.body.name}' && (git push copy HEAD || git push origin HEAD)`;
         const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
 
         pid.stdout.on('data', (data) => {
@@ -326,7 +326,7 @@ app.post('/api/fetch', async (req, res) => {
             clientSocket.send(JSON.stringify({type: 'files', files: diff }));
             clientSocket.send(JSON.stringify({type: 'finish', target: 'fetch', code }));
         } else {
-            const cmd = `git add . && git commit -m 'yarn fetch' && (git push copy HEAD || git push origin HEAD)`;
+            const cmd = `git add . && git commit -s -m 'yarn fetch' && (git push copy HEAD || git push origin HEAD)`;
             const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
 
             pid.stdout.on('data', (data) => {
