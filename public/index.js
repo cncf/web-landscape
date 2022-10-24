@@ -3702,7 +3702,7 @@ function getLandscapeYmlEditor() {
                     for (let summaryLine of this.summaryValue) {
                         result[summaryLine.name] = summaryLine.value;
                     }
-                    return lines.length > 0 ? result : ''
+                    return Object.keys(result).length > 0 ? result : ''
                 },
                 fieldStyle: {
                     'fontSize': '10px',
