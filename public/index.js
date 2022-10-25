@@ -739,7 +739,7 @@ function getSummaryEditor() {
                 html: `<h1>Please enter summary fields for the selected item</h1>`
             }, {
                 xtype: 'textarea',
-                fieldLabel: 'Personas',
+                fieldLabel: 'Target Users',
                 name: 'summary_personas'
             }, {
                 xtype: 'textarea',
@@ -763,7 +763,7 @@ function getSummaryEditor() {
                 name: 'summary_integration'
             }, {
                 xtype: 'textfield',
-                fieldLabel: 'Intro Url',
+                fieldLabel: 'Overview Video Url',
                 name: 'summary_intro_url'
             }]}, {
                 xtype: 'container',
