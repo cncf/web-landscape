@@ -21,6 +21,17 @@ const tmpFolder = process.env.TMP_FOLDER || 'tmp';
 const landscapeAppFolder = process.env.LANDSCAPEAPP_FOLDER || "../landscapeapp";
 const maxTimeoutInMinutes = 720;
 
+if (process.env.KEY2) {
+    require('fs').mkdirSync(process.env.HOME + '/.ssh');
+    require('fs').writeFileSync(process.env.HOME + '/.ssh/bot2',
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n" +
+        process.env.KEY2.replaceAll(" ","\n") + 
+        "\n-----END OPENSSH PRIVATE KEY-----"
+    );
+    require('fs').chmodSync(process.env.HOME + './ssh/bot2', 0o400);
+}
+
+
 const serverData = {}; // builds for every socket
 
 require('fs').mkdirSync(tmpFolder, { recursive: true });
@@ -43,6 +54,7 @@ const githubRepoLandscapes = `
         prestodb/presto-landscape
         TarsCloud/TARS_landscape
         ucfoundation/ucf-landscape
+        riscv-admin/riscv-landscape
     `.split('\n').map( (x) => x.trim()).filter( (x) => !!x);
 
 
@@ -144,8 +156,8 @@ async function getPullRequest({req, res}) {
 app.post('/api/connect', async function(req, res) {
 
     const repoFolder = req.body.repo.replace('/', '-');
-    const repoHost = `https://$GITHUB_USER:$GITHUB_TOKEN@github.com`;
     const repoUrl = `https://$GITHUB_USER:$GITHUB_TOKEN@github.com/${req.body.repo}`;
+    const repoUrl2 = `git@github.com:${req.body.repo}.git`;
     const branch = `web-landscape-${req.body.branch}`;
 
     const socketId = req.body.socketId;
@@ -174,6 +186,7 @@ app.post('/api/connect', async function(req, res) {
             const cmd = ` git clone ../../../tmp-landscapes/${repoFolder} . && \
                     git remote rm origin && \
                     git remote add origin ${repoUrl} && \
+                    git remote add origin2 ${repoUrl2} && \
                     git fetch && \
                     git reset --hard origin/${defaultBranch} && \
                     (git checkout -t origin/${branch} || git checkout -b ${branch}) \
@@ -273,7 +286,8 @@ app.post('/api/upload-file', async function(req, res) {
     if (!isPreview) {
         await updatePreview({socketId, dir: req.body.dir, name: req.body.name });
 
-        const cmd = `git add . && git commit -s -m 'update ${req.body.name}' && (git push copy HEAD || git push origin HEAD)`;
+        const cmd = `git add . && git commit -s -m 'update ${req.body.name}' && (git push copy HEAD || git push origin HEAD || GIT_SSH_COMMAND='ssh -i ~/.ssh/bot2 -o IdentitiesOnly=yes' git push origin2 HEAD)`;
+        console.info(cmd);
         const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
 
         pid.stdout.on('data', (data) => {
@@ -326,7 +340,8 @@ app.post('/api/fetch', async (req, res) => {
             clientSocket.send(JSON.stringify({type: 'files', files: diff }));
             clientSocket.send(JSON.stringify({type: 'finish', target: 'fetch', code }));
         } else {
-            const cmd = `git add . && git commit -s -m 'yarn fetch' && (git push copy HEAD || git push origin HEAD)`;
+            const cmd = `git add . && git commit -s -m 'yarn fetch' && (git push copy HEAD || git push origin HEAD || GIT_SSH_COMMAND='ssh -i ~/.ssh/bot2 -o IdentitiesOnly=yes' git push origin2 HEAD)`;
+            console.info(cmd);
             const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
 
             pid.stdout.on('data', (data) => {
@@ -348,11 +363,15 @@ app.post('/api/fetch', async (req, res) => {
 app.post('/api/item-id', async function(req, res) {
     const socketId = req.body.socketId;
     const fileName = path.resolve(tmpFolder, socketId, 'preview/dist/landscape/data/items.json');
-    const content = JSON.parse(await fs.readFile(fileName, 'utf-8'));
-    const item = content.filter( (x) => x.path === req.body.path && x.name === req.body.name)[0]
-    if (item) {
-        res.json({id: item.id});
-    } else  {
+    try {
+        const content = JSON.parse(await fs.readFile(fileName, 'utf-8'));
+        const item = content.filter( (x) => x.path === req.body.path && x.name === req.body.name)[0]
+        if (item) {
+            res.json({id: item.id});
+        } else  {
+            res.json({success: false});
+        }
+    } catch(ex) {
         res.json({success: false});
     }
 });

@@ -218,6 +218,7 @@ function getGithubSelector() {
         prestodb/presto-landscape
         TarsCloud/TARS_landscape
         ucfoundation/ucf-landscape
+        riscv-admin/riscv-landscape
     `.split('\n').map( (x) => x.trim()).filter( (x) => !!x);
 
 
@@ -1935,6 +1936,7 @@ function getSettingsYmlEditor() {
                     const form = this.queryBy( (x) => x.memberId === entry.id)[0];
                     for (let key in entry) {
                         const field = form.queryBy( (x) => x.name === key)[0];
+                        console.info(key, field);
                         field.setValue(entry[key]);
                     }
                 }
