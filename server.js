@@ -28,7 +28,7 @@ if (process.env.KEY2) {
         process.env.KEY2.replaceAll(" ","\n") + 
         "\n-----END OPENSSH PRIVATE KEY-----"
     );
-    require('fs').chmodSync(process.env.HOME + './ssh/bot2', 0o400);
+    require('fs').chmodSync(process.env.HOME + '/.ssh/bot2', 0o400);
 }
 
 
