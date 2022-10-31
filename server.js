@@ -22,7 +22,7 @@ const landscapeAppFolder = process.env.LANDSCAPEAPP_FOLDER || "../landscapeapp";
 const maxTimeoutInMinutes = 720;
 
 if (process.env.KEY2) {
-    require('fs').mkdirSync(process.env.HOME + '/.ssh');
+    require('fs').mkdirSync(process.env.HOME + '/.ssh', { recursive: true});
     require('fs').writeFileSync(process.env.HOME + '/.ssh/bot2',
         "-----BEGIN OPENSSH PRIVATE KEY-----\n" +
         process.env.KEY2.replaceAll(" ","\n") + 
