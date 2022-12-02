@@ -944,6 +944,12 @@ function getBigPictureEditor() {
                     fieldLabel: 'left',
                     description: 'X coordinate of a box in pixels'
                 }, {
+                    xtype: 'checkbox',
+                    name: 'is_large',
+                    fieldLabel: 'Large Icons',
+                    showIf: ['HorizontalCategory', 'VerticalCategory'],
+                    description: 'Should we show large icons for all items in this group?'
+                }, {
                     xtype: 'textfield',
                     name: 'color',
                     fieldLabel: 'color',
