@@ -33,9 +33,9 @@ if (process.env.KEY2) {
 if (process.env.KEY3) {
     require('fs').mkdirSync(process.env.HOME + '/.ssh', { recursive: true});
     require('fs').writeFileSync(process.env.HOME + '/.ssh/bot3',
-        "-----BEGIN OPENSSH PRIVATE KEY-----\n" +
+        "-----BEGIN RSA PRIVATE KEY-----\n" +
         process.env.KEY3.replaceAll(" ","\n") + 
-        "\n-----END OPENSSH PRIVATE KEY-----\n\n"
+        "\n-----END RSA PRIVATE KEY-----\n\n"
     );
     require('fs').chmodSync(process.env.HOME + '/.ssh/bot3', 0o600);
 }
