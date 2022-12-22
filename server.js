@@ -30,6 +30,15 @@ if (process.env.KEY2) {
     );
     require('fs').chmodSync(process.env.HOME + '/.ssh/bot2', 0o600);
 }
+if (process.env.KEY3) {
+    require('fs').mkdirSync(process.env.HOME + '/.ssh', { recursive: true});
+    require('fs').writeFileSync(process.env.HOME + '/.ssh/bot3',
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n" +
+        process.env.KEY3.replaceAll(" ","\n") + 
+        "\n-----END OPENSSH PRIVATE KEY-----\n\n"
+    );
+    require('fs').chmodSync(process.env.HOME + '/.ssh/bot3', 0o600);
+}
 
 
 const serverData = {}; // builds for every socket
@@ -286,7 +295,7 @@ app.post('/api/upload-file', async function(req, res) {
     if (!isPreview) {
         await updatePreview({socketId, dir: req.body.dir, name: req.body.name });
 
-        const cmd = `git add . && git commit -s -m 'update ${req.body.name}' && (git push copy HEAD || git push origin HEAD || GIT_SSH_COMMAND='ssh -i ~/.ssh/bot2 -o IdentitiesOnly=yes' git push origin2 HEAD)`;
+        const cmd = `git add . && git commit -s -m 'update ${req.body.name}' && (git push copy HEAD || git push origin HEAD || GIT_SSH_COMMAND='ssh -i ~/.ssh/bot2 -o IdentitiesOnly=yes' git push origin2 HEAD || GIT_SSH_COMMAND='ssh -i ~/.ssh/bot3 -o IdentitiesOnly=yes' git push origin2 HEAD)`;
         console.info(cmd);
         const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
 
@@ -340,7 +349,7 @@ app.post('/api/fetch', async (req, res) => {
             clientSocket.send(JSON.stringify({type: 'files', files: diff }));
             clientSocket.send(JSON.stringify({type: 'finish', target: 'fetch', code }));
         } else {
-            const cmd = `git add . && git commit -s -m 'yarn fetch' && (git push copy HEAD || git push origin HEAD || GIT_SSH_COMMAND='ssh -i ~/.ssh/bot2 -o IdentitiesOnly=yes' git push origin2 HEAD)`;
+            const cmd = `git add . && git commit -s -m 'yarn fetch' && (git push copy HEAD || git push origin HEAD || GIT_SSH_COMMAND='ssh -i ~/.ssh/bot2 -o IdentitiesOnly=yes' git push origin2 HEAD || GIT_SSH_COMMAND='ssh -i ~/.ssh/bot3 -o IdentitiesOnly=yes' git push origin2 HEAD)`;
             console.info(cmd);
             const pid = childProcess.spawn(`bash`, [`-c`, cmd], { cwd: tmpPath });
 
