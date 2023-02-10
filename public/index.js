@@ -3253,6 +3253,7 @@ function getLandscapeYmlEditor() {
         assign('twitter');
         assign('crunchbase');
         assign('repo_url');
+        assign('license');
         assign('project_org');
         assign('additional_repos');
         assign('stock_ticker');
@@ -3484,6 +3485,23 @@ function getLandscapeYmlEditor() {
                     const originalValue = Ext.form.field.Text.prototype.getValue.call(this).replace('https://github.com/', '');
                     return originalValue ?  `https://github.com/${originalValue}` : '' ;
                 }
+            }, {
+                xtype: 'container',
+                layout: 'absolute',
+                height: 20,
+                items: [{
+                    x: 110,
+                    y: 6,
+                    width: 290,
+                    xtype: 'box',
+                    cls: 'x-form-item-label',
+                    html: `<i>Use this to override the license derived from repo with a specific one</i>`
+                }]
+            }, {
+                xtype: 'textfield',
+                name: 'license',
+                fieldLabel: 'License',
+                description: 'If you want to explicitly specify the open source license, then put its full name here'
             }, {
                 xtype: 'container',
                 layout: 'absolute',
@@ -3881,6 +3899,7 @@ function getLandscapeYmlEditor() {
             assign('twitter');
             assign('crunchbase');
             assign('repo_url');
+            assign('license');
             assign('project_org');
             assign('additional_repos');
             assign('stock_ticker');

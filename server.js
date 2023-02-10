@@ -149,6 +149,7 @@ async function getPullRequest({req, res}) {
     const branch = `web-landscape-${req.body.branch}`;
 
     const client = require('@octokit/core').Octokit;
+    console.info(process.env.GITHUB_KEY);
     const octokit = new client({
         auth: (process.env.GITHUB_KEY || '').split(',')[0]
     });
