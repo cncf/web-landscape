@@ -2360,7 +2360,7 @@ function getSettingsYmlEditor() {
             },
             setValue: function(v) {
                 this.value = v;
-                for (var k of v) {
+                for (var k of (v || [])) {
                     const section = adsSection();
                     editorAds.add(section);
                     editorAds.doLayout();
