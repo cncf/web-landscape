@@ -64,6 +64,7 @@ const githubRepoLandscapes = `
         TarsCloud/TARS_landscape
         ucfoundation/ucf-landscape
         riscv-admin/riscv-landscape
+        SSIAssociation/landscape-template
     `.split('\n').map( (x) => x.trim()).filter( (x) => !!x);
 
 

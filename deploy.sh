@@ -1,4 +1,4 @@
-ssh -t root@86.109.11.205 <<'EOL'
+ssh -t root@136.144.51.247 <<'EOL'
   cd web-landscape
   git pull
   yarn
